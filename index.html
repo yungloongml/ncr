@@ -28,7 +28,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 將重要函式掛載到全域 window，讓 HTML 的 onclick 可以呼叫
     window.saveToFirebase = async function() {
       var data = collectFormData();
       if (!data.number) {
@@ -153,7 +152,7 @@
 
   <style>
     :root{
-      --bg:#F4F6F8;
+      --bg:#F8FAFC;
       --surface:#FFFFFF;
       --ink:#1E293B;
       --muted:#64748B;
@@ -179,7 +178,12 @@
       -webkit-font-smoothing:antialiased;
     }
 
-    /* 左右側欄版面配置：改為滿版貼齊左側與上下 */
+    /* 各分頁專屬的微淡色背景（降低視覺疲勞與辨識分頁） */
+    body.tab-yellow { background: #FAF9F5; } /* 微暖白（發起填寫） */
+    body.tab-blue   { background: #F4F7FC; } /* 微柔藍（矯正措施） */
+    body.tab-green  { background: #F4F8F5; } /* 微淡綠（成果確認） */
+    body.tab-history{ background: #F7F5FA; } /* 微淡紫灰（歷史單據） */
+
     .app-layout{
       min-height:100vh;
       display:flex;
@@ -189,7 +193,7 @@
       .app-layout{ flex-direction:column; min-height:auto; }
     }
 
-    /* 左側直式選單：改為高瘦滿版通天設計 */
+    /* 左側直式選單 (滿版延伸) */
     .sidebar{
       width:240px;
       flex:none;
@@ -200,6 +204,7 @@
       top:0;
       height:100vh;
       overflow-y:auto;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.01);
     }
     @media (max-width:860px){
       .sidebar{ width:100%; position:static; height:auto; border-right:none; border-bottom:1px solid var(--line); }
@@ -227,10 +232,16 @@
       text-align:left;
       transition:background .15s ease, color .15s ease;
     }
-    .tab-btn:hover{ background:var(--bg); color:var(--ink); }
+    .tab-btn:hover{ background:rgba(0,0,0,0.03); color:var(--ink); }
     .tab-btn.active{ background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
 
-    .main-content{ flex:1; min-width:0; width:100%; padding:32px 36px 60px; max-width:1100px; }
+    /* 主內容區填滿右側，不再有限寬卡片限制 */
+    .main-content{ 
+      flex:1; 
+      min-width:0; 
+      width:100%; 
+      padding:36px 48px 80px; 
+    }
 
     .card{
       background:transparent;
@@ -241,8 +252,7 @@
     }
     .card-top-bar{ display:none; }
 
-    /* 放大標題 */
-    header{ padding:0 0 20px; border-bottom:1px solid var(--line); margin-bottom:24px; }
+    header{ padding:0 0 20px; border-bottom:1px solid var(--line); margin-bottom:28px; }
     .header-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
     header h1{ margin:0; font-size:28px; font-weight:700; letter-spacing:.01em; color:var(--ink); }
     header h2{ margin:6px 0 0; font-size:18px; font-weight:600; color:var(--muted); }
@@ -255,19 +265,22 @@
     .tab-panel{ display:none; }
     .tab-panel.active{ display:block; }
 
-    /* ---- Sections ---- */
+    /* 移除外圍獨立白框，改為乾淨的段落群組 */
     .section{
-      background:var(--surface);
-      border:1px solid var(--line);
-      border-radius:12px;
-      padding:22px 24px;
-      margin-bottom:20px;
-      box-shadow:0 1px 2px rgba(0,0,0,.02);
+      background:transparent;
+      border:none;
+      border-bottom:1px solid var(--line);
+      border-radius:0;
+      padding:20px 0;
+      margin-bottom:8px;
+      box-shadow:none;
     }
+    .section:last-of-type { border-bottom:none; }
+
     .section-heading{
       display:flex; align-items:baseline; gap:4px;
-      font-size:13.5px; font-weight:600; color:var(--ink);
-      margin:0 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line);
+      font-size:13.5px; font-weight:600; color:var(--muted);
+      margin:0 0 10px; padding-bottom:0; border-bottom:none;
     }
     .req{ color:var(--danger); font-weight:700; }
 
@@ -279,20 +292,19 @@
     }
     input[type=text], input[type=number], input[type=date], select, textarea{
       width:100%; font-family:inherit; font-size:14px; color:var(--ink);
-      padding:9px 12px; border:1px solid var(--line-strong); border-radius:8px;
+      padding:10px 14px; border:1px solid var(--line-strong); border-radius:8px;
       background:var(--surface); transition:border-color .15s ease, box-shadow .15s ease;
     }
     input[type=text]:focus, input[type=number]:focus, input[type=date]:focus, select:focus, textarea:focus{
       outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);
     }
-    textarea{ resize:vertical; min-height:90px; }
+    textarea{ resize:vertical; min-height:100px; }
 
-    /* ---- Chip choices ---- */
     .chip-group{ display:flex; flex-wrap:wrap; gap:8px; }
     .chip{ position:relative; display:inline-flex; }
     .chip input{ position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; }
     .chip span{
-      display:inline-flex; align-items:center; padding:7px 14px;
+      display:inline-flex; align-items:center; padding:8px 16px;
       border:1px solid var(--line-strong); border-radius:20px;
       font-size:13px; color:var(--ink); background:var(--surface);
       transition:background .15s ease, border-color .15s ease, color .15s ease;
@@ -312,56 +324,52 @@
     .severity-chip input:checked + span{ border-color:var(--danger); background:#FEF2F2; color:var(--danger); }
     .severity-chip.minor input:checked + span{ border-color:var(--amber); background:#FFFBEB; color:var(--amber); }
 
-    /* ---- Table for History ---- */
-    .table-container{ width:100%; overflow-x:auto; }
+    .table-container{ width:100%; overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:10px; }
     .history-table{ width:100%; border-collapse:collapse; text-align:left; font-size:13.5px; }
-    .history-table th, .history-table td{ padding:12px 14px; border-bottom:1px solid var(--line); }
-    .history-table th{ font-weight:600; color:var(--muted); background:var(--bg); }
+    .history-table th, .history-table td{ padding:14px 16px; border-bottom:1px solid var(--line); }
+    .history-table th{ font-weight:600; color:var(--muted); background:rgba(0,0,0,0.02); }
     .history-table tr:hover td{ background:var(--accent-soft); }
     .btn-sm{
-      background:var(--accent); color:#fff; border:none; padding:5px 10px; border-radius:6px;
+      background:var(--accent); color:#fff; border:none; padding:6px 12px; border-radius:6px;
       cursor:pointer; font-size:12px; font-family:inherit;
     }
     .btn-sm:hover{ background:var(--accent-ink); }
     .btn-danger{ background:var(--danger); }
     .btn-danger:hover{ background:#B91C1C; }
 
-    /* 歷史單據可點擊單號樣式 */
     .record-link{ color:var(--blue); font-weight:600; cursor:pointer; text-decoration:underline; }
     .record-link:hover{ color:#1D4ED8; }
 
-    /* 展開的詳細資料卡片 */
-    .detail-dropdown-row td{ background:#F8FAFC !important; padding:16px 20px !important; }
-    .detail-card{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:16px; }
+    .detail-dropdown-row td{ background:#F1F5F9 !important; padding:16px 20px !important; }
+    .detail-card{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:20px; }
 
-    /* ---- Footer / actions ---- */
-    .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:24px; padding:0 4px; }
+    .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:32px; padding-top:16px; border-top:1px solid var(--line); }
     .msg{ font-size:12.5px; color:var(--danger); margin-right:auto; }
     button.primary{
       appearance:none; border:none; cursor:pointer; font-family:inherit;
       background:var(--accent); color:#fff; font-size:14px; font-weight:600;
-      padding:11px 28px; border-radius:8px; transition:background .15s ease;
+      padding:12px 32px; border-radius:8px; transition:background .15s ease;
     }
     button.primary:hover{ background:var(--accent-ink); }
     button.primary:disabled{ background:var(--line-strong); color:var(--muted); cursor:default; }
 
-    .readonly-box{ background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:20px; }
-    .readonly-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; font-size:13.5px; }
+    .readonly-box{ background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:20px; margin-bottom:16px; }
+    .readonly-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; font-size:13.5px; }
     .readonly-item span{ color:var(--muted); display:block; font-size:12px; margin-bottom:2px; }
 
     .placeholder{
       background:var(--surface);
       border:1px dashed var(--line-strong); border-radius:12px;
-      padding:48px 24px; text-align:center; color:var(--muted); font-size:13.5px; line-height:1.8;
+      padding:56px 24px; text-align:center; color:var(--muted); font-size:13.5px; line-height:1.8;
     }
     .placeholder strong{ color:var(--ink); font-weight:600; }
   </style>
 </head>
-<body>
+<body class="tab-yellow">
 
 <div class="app-layout">
   
-  <!-- 左側選單 (滿版延伸) -->
+  <!-- 左側選單 -->
   <div class="sidebar">
     <div class="tabs">
       <button class="tab-btn active" data-tab="yellow" onclick="showTab('yellow')">發起填寫</button>
@@ -390,14 +398,14 @@
       <div class="tab-panel active" id="panel-yellow">
         <div class="section">
           <p class="section-heading">單號 <span class="req">*</span></p>
-          <div class="field" style="max-width:220px;">
+          <div class="field" style="max-width:240px;">
             <input type="text" id="recordNumber" placeholder="請手動輸入單號">
           </div>
         </div>
 
         <div class="section">
           <p class="section-heading">發文日期</p>
-          <div class="field" style="max-width:220px;">
+          <div class="field" style="max-width:240px;">
             <input type="date" id="issueDate">
           </div>
         </div>
@@ -459,7 +467,7 @@
 
         <div class="section">
           <p class="section-heading">不符合內容說明（人 / 事 / 時 / 地 / 物）</p>
-          <textarea id="description" rows="4" placeholder="請描述事件經過…"></textarea>
+          <textarea id="description" placeholder="請描述事件經過…"></textarea>
         </div>
 
         <div class="actions">
@@ -472,7 +480,7 @@
       <div class="tab-panel" id="panel-blue">
         <div class="section">
           <p class="section-heading">選擇單號 <span class="req">*</span></p>
-          <div class="field" style="max-width:280px;">
+          <div class="field" style="max-width:300px;">
             <select id="selectRecordNum" onchange="onSelectRecordChange()">
               <option value="">-- 請先選擇現有單號 --</option>
             </select>
@@ -481,7 +489,7 @@
 
         <div id="correctiveContainer" style="display:none;">
           <div class="section">
-            <p class="section-heading">之前填過的資訊</p>
+            <p class="section-heading">先前填寫的資訊內容</p>
             <div class="readonly-box">
               <div class="readonly-grid">
                 <div class="readonly-item"><span>發文日期</span><strong id="ro-issueDate">-</strong></div>
@@ -500,7 +508,7 @@
             <p class="section-heading">矯正採取改善措施</p>
             <div class="field" style="margin-bottom:16px;"><label>矯正對策</label><textarea id="correctiveAction" placeholder="請填寫矯正對策…"></textarea></div>
             <div class="field" style="margin-bottom:16px;"><label>原因分析</label><textarea id="rootCause" placeholder="請填寫原因分析…"></textarea></div>
-            <div class="field" style="max-width:220px;"><label>預計完成日期</label><input type="date" id="dueDate"></div>
+            <div class="field" style="max-width:240px;"><label>預計完成日期</label><input type="date" id="dueDate"></div>
           </div>
 
           <div class="actions">
@@ -549,6 +557,9 @@ function showTab(name) {
     p.classList.remove('active');
   });
   document.getElementById('panel-' + name).classList.add('active');
+
+  // 切換整頁的淡色佈景主題
+  document.body.className = 'tab-' + name;
 
   if (name === 'blue') {
     loadExistingRecordsFromCloud();
@@ -620,7 +631,6 @@ function onSelectRecordChange() {
   container.style.display = 'block';
 }
 
-// 歷史單據列表渲染 (支援點擊展開明細與刪除)
 function renderHistoryTable(records) {
   var container = document.getElementById('historyListContainer');
   if (!records || records.length === 0) {
@@ -657,7 +667,7 @@ function renderHistoryTable(records) {
       '<tr id="detail-row-' + safeNum + '" class="detail-dropdown-row" style="display:none;">' +
       '<td colspan="7">' +
       '<div class="detail-card">' +
-      '<strong style="color:var(--accent-ink); display:block; margin-bottom:10px;">單號 #' + safeNum + ' 完整內容檢視</strong>' +
+      '<strong style="color:var(--accent-ink); display:block; margin-bottom:12px;">單號 #' + safeNum + ' 完整內容檢視</strong>' +
       '<div class="readonly-grid">' +
       '<div class="readonly-item"><span>發文日期</span><strong>' + esc(d.issueDate || '-') + '</strong></div>' +
       '<div class="readonly-item"><span>發文單位 / 人員</span><strong>' + esc(d.fromDept || '-') + ' / ' + esc(d.fromPeople || '-') + '</strong></div>' +
@@ -677,7 +687,6 @@ function renderHistoryTable(records) {
   container.innerHTML = html;
 }
 
-// 切換顯示單據詳細內容
 function toggleDetail(num) {
   var row = document.getElementById('detail-row-' + num);
   if (row) {
@@ -685,7 +694,6 @@ function toggleDetail(num) {
   }
 }
 
-// 篩選歷史單據
 function filterHistoryRecords() {
   var keyword = document.getElementById('historySearchInput').value.trim().toLowerCase();
   if (!window._historyRecords) return;
@@ -701,7 +709,6 @@ function filterHistoryRecords() {
   renderHistoryTable(filtered);
 }
 
-// 從歷史單據直接列印
 function printHistoryRecord(num) {
   var record = window._historyRecords.find(function(r) { return r.number === num; });
   if (record) {
@@ -709,7 +716,6 @@ function printHistoryRecord(num) {
   }
 }
 
-// 從歷史單據跳轉至編輯頁面
 function editHistoryRecord(num) {
   showTab('blue');
   var select = document.getElementById('selectRecordNum');
