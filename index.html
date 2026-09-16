@@ -11,7 +11,7 @@
   <!-- 引入 Firebase SDK (v10 模組化版本) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, doc, setDoc, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, getDocs, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     // 已代入你的 Firebase 設定
     const firebaseConfig = {
@@ -87,7 +87,6 @@
       }
     };
 
-    // 新增：載入歷史單據列表
     window.loadHistoryRecords = async function() {
       var container = document.getElementById('historyListContainer');
       container.innerHTML = '<div class="placeholder">資料載入中…</div>';
@@ -98,12 +97,23 @@
           window._historyRecords.push(docSnap.data());
         });
         
-        // 依照單號排序 (若為數字或字串排序)
         window._historyRecords.sort((a, b) => (b.number || '').localeCompare(a.number || ''));
         renderHistoryTable(window._historyRecords);
       } catch (err) {
         console.error('載入歷史單據失敗', err);
         container.innerHTML = '<div class="placeholder">載入失敗，請檢查網路連線。</div>';
+      }
+    };
+
+    window.deleteHistoryRecord = async function(num) {
+      if (!confirm('確定要刪除單號 ' + num + ' 嗎？此動作無法復原。')) return;
+      try {
+        await deleteDoc(doc(db, "ncr_data", num));
+        alert('單號 ' + num + ' 已刪除成功！');
+        loadHistoryRecords();
+      } catch (err) {
+        alert('刪除失敗：' + err.message);
+        console.error(err);
       }
     };
 
@@ -169,7 +179,70 @@
       -webkit-font-smoothing:antialiased;
     }
 
-    .page{ max-width:960px; margin:0 auto; padding:24px 20px 60px; }
+    /* 左右側欄版面配置 */
+    .app-layout{
+      max-width:1200px;
+      margin:0 auto;
+      padding:24px 20px 60px;
+      display:flex;
+      gap:24px;
+      align-items:flex-start;
+    }
+    @media (max-width:860px){
+      .app-layout{ flex-direction:column; }
+    }
+
+    /* 左側直式選單 */
+    .sidebar{
+      width:240px;
+      flex:none;
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:16px;
+      position:sticky;
+      top:24px;
+      box-shadow:0 1px 2px rgba(0,0,0,.02);
+    }
+    @media (max-width:860px){
+      .sidebar{ width:100%; position:static; }
+    }
+    .sidebar-title{
+      font-size:12px;
+      font-weight:700;
+      color:var(--muted);
+      letter-spacing:.05em;
+      text-transform:uppercase;
+      padding:4px 10px 10px;
+      border-bottom:1px solid var(--line);
+      margin-bottom:8px;
+    }
+    .tabs{
+      display:flex;
+      flex-direction:column;
+      gap:4px;
+    }
+    .tab-btn{
+      appearance:none;
+      background:none;
+      border:none;
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      width:100%;
+      padding:10px 14px;
+      border-radius:8px;
+      font-family:inherit;
+      font-size:14px;
+      font-weight:500;
+      color:var(--muted);
+      text-align:left;
+      transition:background .15s ease, color .15s ease;
+    }
+    .tab-btn:hover{ background:var(--bg); color:var(--ink); }
+    .tab-btn.active{ background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
+
+    .main-content{ flex:1; min-width:0; width:100%; }
 
     .card{
       background:transparent;
@@ -180,39 +253,16 @@
     }
     .card-top-bar{ display:none; }
 
-    header{ padding:12px 0 24px; border-bottom:1px solid var(--line); margin-bottom:24px; }
+    /* 放大標題 */
+    header{ padding:0 0 20px; border-bottom:1px solid var(--line); margin-bottom:24px; }
     .header-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
-    header h1{ margin:0; font-size:20px; font-weight:700; letter-spacing:.01em; color:var(--ink); }
-    header h2{ margin:4px 0 0; font-size:13.5px; font-weight:500; color:var(--muted); }
+    header h1{ margin:0; font-size:26px; font-weight:700; letter-spacing:.01em; color:var(--ink); }
+    header h2{ margin:6px 0 0; font-size:16px; font-weight:600; color:var(--muted); }
     .form-code{
-      font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
+      font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted);
       background:var(--surface); border:1px solid var(--line); border-radius:6px;
-      padding:4px 10px; white-space:nowrap; align-self:center;
+      padding:6px 12px; white-space:nowrap; align-self:center;
     }
-
-    /* ---- Tabs ---- */
-    .tabs{ display:flex; padding:0; border-bottom:1px solid var(--line); background:transparent; margin-bottom:28px; overflow-x:auto; }
-    .tab-btn{
-      appearance:none; background:none; border:none; cursor:pointer;
-      display:flex; align-items:center; gap:8px;
-      padding:12px 18px; margin-right:8px;
-      font-family:inherit; font-size:13.5px; font-weight:500; color:var(--muted);
-      border-bottom:2px solid transparent; transition:color .15s ease, border-color .15s ease;
-      white-space:nowrap;
-    }
-    .tab-btn:hover{ color:var(--ink); }
-    .tab-btn.active{ color:var(--accent-ink); border-bottom-color:var(--accent); font-weight:600; }
-    .dot{ width:8px; height:8px; border-radius:50%; flex:none; }
-    .dot.amber{ background:var(--amber); }
-    .dot.blue{ background:var(--blue); }
-    .dot.green{ background:var(--green); }
-    .dot.purple{ background:var(--danger); }
-    .step-no{
-      font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
-      background:var(--line); border-radius:50%; width:18px; height:18px;
-      display:flex; align-items:center; justify-content:center; flex:none;
-    }
-    .tab-btn.active .step-no{ background:var(--accent); color:#fff; }
 
     .tab-panel{ display:none; }
     .tab-panel.active{ display:block; }
@@ -285,6 +335,16 @@
       cursor:pointer; font-size:12px; font-family:inherit;
     }
     .btn-sm:hover{ background:var(--accent-ink); }
+    .btn-danger{ background:var(--danger); }
+    .btn-danger:hover{ background:#B91C1C; }
+
+    /* 歷史單據可點擊單號樣式 */
+    .record-link{ color:var(--blue); font-weight:600; cursor:pointer; text-decoration:underline; }
+    .record-link:hover{ color:#1D4ED8; }
+
+    /* 展開的詳細資料卡片 */
+    .detail-dropdown-row td{ background:#F8FAFC !important; padding:16px 20px !important; }
+    .detail-card{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:16px; }
 
     /* ---- Footer / actions ---- */
     .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:24px; padding:0 4px; }
@@ -311,187 +371,185 @@
 </head>
 <body>
 
-<div class="page">
-  <div class="card">
-    <div class="card-top-bar"></div>
-
-    <header>
-      <div class="header-row">
-        <div>
-          <h1>永隆工程股份有限公司</h1>
-          <h2>不符合及矯正措施單</h2>
-        </div>
-        <div class="form-code">PA-21 · 202001V03</div>
-      </div>
-    </header>
-
+<div class="app-layout">
+  
+  <!-- 左側選單 -->
+  <div class="sidebar">
+    <div class="sidebar-title">系統導覽</div>
     <div class="tabs">
-      <button class="tab-btn active" data-tab="yellow" onclick="showTab('yellow')">
-        <span class="step-no">1</span><span class="dot amber"></span>發起填寫
-      </button>
-      <button class="tab-btn" data-tab="blue" onclick="showTab('blue')">
-        <span class="step-no">2</span><span class="dot blue"></span>矯正措施
-      </button>
-      <button class="tab-btn" data-tab="green" onclick="showTab('green')">
-        <span class="step-no">3</span><span class="dot green"></span>成果確認
-      </button>
-      <button class="tab-btn" data-tab="history" onclick="showTab('history')">
-        <span class="step-no">4</span><span class="dot purple"></span>歷史單據
-      </button>
+      <button class="tab-btn active" data-tab="yellow" onclick="showTab('yellow')">發起填寫</button>
+      <button class="tab-btn" data-tab="blue" onclick="showTab('blue')">矯正措施</button>
+      <button class="tab-btn" data-tab="green" onclick="showTab('green')">成果確認</button>
+      <button class="tab-btn" data-tab="history" onclick="showTab('history')">歷史單據</button>
     </div>
+  </div>
 
-    <!-- 第1頁: 發起填寫 -->
-    <div class="tab-panel active" id="panel-yellow">
-      <div class="section">
-        <p class="section-heading">單號 <span class="req">*</span></p>
-        <div class="field" style="max-width:220px;">
-          <input type="text" id="recordNumber" placeholder="請手動輸入單號">
+  <!-- 主要內容區 -->
+  <div class="main-content">
+    <div class="card">
+      <div class="card-top-bar"></div>
+
+      <header>
+        <div class="header-row">
+          <div>
+            <h1>永隆工程股份有限公司</h1>
+            <h2>不符合及矯正措施單</h2>
+          </div>
+          <div class="form-code">PA-21 · 202001V03</div>
         </div>
-      </div>
+      </header>
 
-      <div class="section">
-        <p class="section-heading">發文日期</p>
-        <div class="field" style="max-width:220px;">
-          <input type="date" id="issueDate">
-        </div>
-      </div>
-
-      <div class="section">
-        <p class="section-heading">發文 / 受文資訊</p>
-        <div class="grid">
-          <div class="field"><label>發文單位</label><input type="text" id="fromDept" placeholder="例：品管工廠"></div>
-          <div class="field"><label>人員</label><input type="text" id="fromPeople"></div>
-        </div>
-        <div class="grid" style="margin-top:16px;">
-          <div class="field"><label>受文單位</label><input type="text" id="toDept" placeholder="例：管理部"></div>
-          <div class="field"><label>人員</label><input type="text" id="toPeople"></div>
-        </div>
-      </div>
-
-      <div class="section">
-        <p class="section-heading">品質不符合類別 <span class="req">*</span></p>
-        <div class="chip-group" id="qualityCategory">
-          <label class="chip"><input type="radio" name="qualityCategory" value="政策"><span>政策</span></label>
-          <label class="chip"><input type="radio" name="qualityCategory" value="材料"><span>材料</span></label>
-          <label class="chip"><input type="radio" name="qualityCategory" value="儀器/量具"><span>儀器/量具</span></label>
-          <label class="chip"><input type="radio" name="qualityCategory" value="施工品質"><span>施工品質</span></label>
-          <label class="chip"><input type="radio" name="qualityCategory" value="其他"><span>其他</span></label>
-        </div>
-      </div>
-
-      <div class="section">
-        <p class="section-heading">品質處理方式 <span class="req">*</span></p>
-        <div class="chip-group" id="qualityAction">
-          <label class="chip"><input type="radio" name="qualityAction" value="修改/重工"><span>修改/重工</span></label>
-          <label class="chip"><input type="radio" name="qualityAction" value="報廢"><span>報廢</span></label>
-          <label class="chip"><input type="radio" name="qualityAction" value="拒收/退貨"><span>拒收/退貨</span></label>
-          <label class="chip"><input type="radio" name="qualityAction" value="照現況使用"><span>照現況使用</span></label>
-          <label class="chip"><input type="radio" name="qualityAction" value="其他"><span>其他</span></label>
-        </div>
-      </div>
-
-      <div class="section">
-        <p class="section-heading">職安衛不符合類別</p>
-        <div class="chip-group" id="safetyCategory">
-          <label class="chip"><input type="radio" name="safetyCategory" value="監督量測"><span>監督量測</span></label>
-          <label class="chip"><input type="radio" name="safetyCategory" value="法規不符合"><span>法規不符合</span></label>
-          <label class="chip"><input type="radio" name="safetyCategory" value="管理審查會議"><span>管理審查會議</span></label>
-          <label class="chip"><input type="radio" name="safetyCategory" value="內部稽核"><span>內部稽核</span></label>
-          <label class="chip"><input type="radio" name="safetyCategory" value="外部稽核"><span>外部稽核</span></label>
-          <label class="chip"><input type="radio" name="safetyCategory" value="環境巡查"><span>環境巡查</span></label>
-          <label class="chip"><input type="radio" name="safetyCategory" value="環安衛事件"><span>環安衛事件</span></label>
-        </div>
-      </div>
-
-      <div class="section">
-        <p class="section-heading">不符合等級</p>
-        <div class="severity-row" id="severity">
-          <label class="severity-chip minor"><input type="radio" name="severity" value="非重大異常"><span>非重大異常</span></label>
-          <label class="severity-chip"><input type="radio" name="severity" value="重大異常"><span>重大異常</span></label>
-        </div>
-      </div>
-
-      <div class="section">
-        <p class="section-heading">不符合內容說明（人 / 事 / 時 / 地 / 物）</p>
-        <textarea id="description" rows="4" placeholder="請描述事件經過…"></textarea>
-      </div>
-
-      <div class="actions">
-        <span class="msg" id="msg"></span>
-        <button class="primary" id="saveBtn" onclick="saveToFirebase()">儲存並列印</button>
-      </div>
-    </div>
-
-    <!-- 第2頁: 矯正措施 -->
-    <div class="tab-panel" id="panel-blue">
-      <div class="section">
-        <p class="section-heading">選擇單號 <span class="req">*</span></p>
-        <div class="field" style="max-width:280px;">
-          <select id="selectRecordNum" onchange="onSelectRecordChange()">
-            <option value="">-- 請先選擇現有單號 --</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="correctiveContainer" style="display:none;">
+      <!-- 第1頁: 發起填寫 -->
+      <div class="tab-panel active" id="panel-yellow">
         <div class="section">
-          <p class="section-heading">之前填過的資訊</p>
-          <div class="readonly-box">
-            <div class="readonly-grid">
-              <div class="readonly-item"><span>發文日期</span><strong id="ro-issueDate">-</strong></div>
-              <div class="readonly-item"><span>發文單位 / 人員</span><strong id="ro-from">-</strong></div>
-              <div class="readonly-item"><span>受文單位 / 人員</span><strong id="ro-to">-</strong></div>
-              <div class="readonly-item"><span>品質不符合類別</span><strong id="ro-qualityCategory">-</strong></div>
-              <div class="readonly-item"><span>品質處理方式</span><strong id="ro-qualityAction">-</strong></div>
-              <div class="readonly-item"><span>職安衛不符合類別</span><strong id="ro-safetyCategory">-</strong></div>
-              <div class="readonly-item"><span>不符合等級</span><strong id="ro-severity">-</strong></div>
-              <div class="readonly-item" style="grid-column: span 2;"><span>不符合內容說明</span><strong id="ro-description" style="white-space:pre-wrap;">-</strong></div>
-            </div>
+          <p class="section-heading">單號 <span class="req">*</span></p>
+          <div class="field" style="max-width:220px;">
+            <input type="text" id="recordNumber" placeholder="請手動輸入單號">
           </div>
         </div>
 
         <div class="section">
-          <p class="section-heading">矯正採取改善措施</p>
-          <div class="field" style="margin-bottom:16px;"><label>矯正對策</label><textarea id="correctiveAction" placeholder="請填寫矯正對策…"></textarea></div>
-          <div class="field" style="margin-bottom:16px;"><label>原因分析</label><textarea id="rootCause" placeholder="請填寫原因分析…"></textarea></div>
-          <div class="field" style="max-width:220px;"><label>預計完成日期</label><input type="date" id="dueDate"></div>
+          <p class="section-heading">發文日期</p>
+          <div class="field" style="max-width:220px;">
+            <input type="date" id="issueDate">
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-heading">發文 / 受文資訊</p>
+          <div class="grid">
+            <div class="field"><label>發文單位</label><input type="text" id="fromDept" placeholder="例：品管工廠"></div>
+            <div class="field"><label>人員</label><input type="text" id="fromPeople"></div>
+          </div>
+          <div class="grid" style="margin-top:16px;">
+            <div class="field"><label>受文單位</label><input type="text" id="toDept" placeholder="例：管理部"></div>
+            <div class="field"><label>人員</label><input type="text" id="toPeople"></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-heading">品質不符合類別 <span class="req">*</span></p>
+          <div class="chip-group" id="qualityCategory">
+            <label class="chip"><input type="radio" name="qualityCategory" value="政策"><span>政策</span></label>
+            <label class="chip"><input type="radio" name="qualityCategory" value="材料"><span>材料</span></label>
+            <label class="chip"><input type="radio" name="qualityCategory" value="儀器/量具"><span>儀器/量具</span></label>
+            <label class="chip"><input type="radio" name="qualityCategory" value="施工品質"><span>施工品質</span></label>
+            <label class="chip"><input type="radio" name="qualityCategory" value="其他"><span>其他</span></label>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-heading">品質處理方式 <span class="req">*</span></p>
+          <div class="chip-group" id="qualityAction">
+            <label class="chip"><input type="radio" name="qualityAction" value="修改/重工"><span>修改/重工</span></label>
+            <label class="chip"><input type="radio" name="qualityAction" value="報廢"><span>報廢</span></label>
+            <label class="chip"><input type="radio" name="qualityAction" value="拒收/退貨"><span>拒收/退貨</span></label>
+            <label class="chip"><input type="radio" name="qualityAction" value="照現況使用"><span>照現況使用</span></label>
+            <label class="chip"><input type="radio" name="qualityAction" value="其他"><span>其他</span></label>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-heading">職安衛不符合類別</p>
+          <div class="chip-group" id="safetyCategory">
+            <label class="chip"><input type="radio" name="safetyCategory" value="監督量測"><span>監督量測</span></label>
+            <label class="chip"><input type="radio" name="safetyCategory" value="法規不符合"><span>法規不符合</span></label>
+            <label class="chip"><input type="radio" name="safetyCategory" value="管理審查會議"><span>管理審查會議</span></label>
+            <label class="chip"><input type="radio" name="safetyCategory" value="內部稽核"><span>內部稽核</span></label>
+            <label class="chip"><input type="radio" name="safetyCategory" value="外部稽核"><span>外部稽核</span></label>
+            <label class="chip"><input type="radio" name="safetyCategory" value="環境巡查"><span>環境巡查</span></label>
+            <label class="chip"><input type="radio" name="safetyCategory" value="環安衛事件"><span>環安衛事件</span></label>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-heading">不符合等級</p>
+          <div class="severity-row" id="severity">
+            <label class="severity-chip minor"><input type="radio" name="severity" value="非重大異常"><span>非重大異常</span></label>
+            <label class="severity-chip"><input type="radio" name="severity" value="重大異常"><span>重大異常</span></label>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-heading">不符合內容說明（人 / 事 / 時 / 地 / 物）</p>
+          <textarea id="description" rows="4" placeholder="請描述事件經過…"></textarea>
         </div>
 
         <div class="actions">
-          <span class="msg" id="msgBlue"></span>
-          <button class="primary" id="saveCorrectiveBtn" onclick="saveCorrectiveToCloud()">儲存矯正措施</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 第3頁: 成果確認 -->
-    <div class="tab-panel" id="panel-green">
-      <div class="placeholder">
-        這一頁對應表單的<strong>「缺失改善成果確認」</strong>區塊<br>
-        （改善結果確認 / 最後完成日期 / 確認人員 / 單位主管）<br><br>
-        此區塊不在系統中填寫，列印出來的表單此處將維持空白，供後續人工簽核填寫。
-      </div>
-    </div>
-
-    <!-- 第4頁: 歷史單據 -->
-    <div class="tab-panel" id="panel-history">
-      <div class="section">
-        <p class="section-heading">搜尋與過濾歷史單據</p>
-        <div class="field" style="max-width:100%;">
-          <input type="text" id="historySearchInput" placeholder="輸入單號、發文單位或關鍵字進行即時搜尋…" oninput="filterHistoryRecords()">
+          <span class="msg" id="msg"></span>
+          <button class="primary" id="saveBtn" onclick="saveToFirebase()">儲存並列印</button>
         </div>
       </div>
 
-      <div class="section">
-        <p class="section-heading">已儲存單據列表</p>
-        <div id="historyListContainer">
-          <div class="placeholder">請切換至此分頁以自動載入歷史單據，或點擊下方按鈕重新整理。<br><br>
-            <button class="btn-sm" style="padding: 8px 16px;" onclick="loadHistoryRecords()">重新載入列表</button>
+      <!-- 第2頁: 矯正措施 -->
+      <div class="tab-panel" id="panel-blue">
+        <div class="section">
+          <p class="section-heading">選擇單號 <span class="req">*</span></p>
+          <div class="field" style="max-width:280px;">
+            <select id="selectRecordNum" onchange="onSelectRecordChange()">
+              <option value="">-- 請先選擇現有單號 --</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="correctiveContainer" style="display:none;">
+          <div class="section">
+            <p class="section-heading">之前填過的資訊</p>
+            <div class="readonly-box">
+              <div class="readonly-grid">
+                <div class="readonly-item"><span>發文日期</span><strong id="ro-issueDate">-</strong></div>
+                <div class="readonly-item"><span>發文單位 / 人員</span><strong id="ro-from">-</strong></div>
+                <div class="readonly-item"><span>受文單位 / 人員</span><strong id="ro-to">-</strong></div>
+                <div class="readonly-item"><span>品質不符合類別</span><strong id="ro-qualityCategory">-</strong></div>
+                <div class="readonly-item"><span>品質處理方式</span><strong id="ro-qualityAction">-</strong></div>
+                <div class="readonly-item"><span>職安衛不符合類別</span><strong id="ro-safetyCategory">-</strong></div>
+                <div class="readonly-item"><span>不符合等級</span><strong id="ro-severity">-</strong></div>
+                <div class="readonly-item" style="grid-column: span 2;"><span>不符合內容說明</span><strong id="ro-description" style="white-space:pre-wrap;">-</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <p class="section-heading">矯正採取改善措施</p>
+            <div class="field" style="margin-bottom:16px;"><label>矯正對策</label><textarea id="correctiveAction" placeholder="請填寫矯正對策…"></textarea></div>
+            <div class="field" style="margin-bottom:16px;"><label>原因分析</label><textarea id="rootCause" placeholder="請填寫原因分析…"></textarea></div>
+            <div class="field" style="max-width:220px;"><label>預計完成日期</label><input type="date" id="dueDate"></div>
+          </div>
+
+          <div class="actions">
+            <span class="msg" id="msgBlue"></span>
+            <button class="primary" id="saveCorrectiveBtn" onclick="saveCorrectiveToCloud()">儲存矯正措施</button>
           </div>
         </div>
       </div>
-    </div>
 
+      <!-- 第3頁: 成果確認 -->
+      <div class="tab-panel" id="panel-green">
+        <div class="placeholder">
+          這一頁對應表單的<strong>「缺失改善成果確認」</strong>區塊<br>
+          （改善結果確認 / 最後完成日期 / 確認人員 / 單位主管）<br><br>
+          此區塊不在系統中填寫，列印出來的表單此處將維持空白，供後續人工簽核填寫。
+        </div>
+      </div>
+
+      <!-- 第4頁: 歷史單據 -->
+      <div class="tab-panel" id="panel-history">
+        <div class="section">
+          <p class="section-heading">搜尋與過濾歷史單據</p>
+          <div class="field" style="max-width:100%;">
+            <input type="text" id="historySearchInput" placeholder="輸入單號、發文單位或關鍵字進行即時搜尋…" oninput="filterHistoryRecords()">
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-heading">已儲存單據列表（點擊單號可展開/收合詳細內容）</p>
+          <div id="historyListContainer">
+            <div class="placeholder">資料載入中…</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
 
@@ -575,7 +633,7 @@ function onSelectRecordChange() {
   container.style.display = 'block';
 }
 
-// 歷史單據列表渲染
+// 歷史單據列表渲染 (支援點擊展開明細與刪除)
 function renderHistoryTable(records) {
   var container = document.getElementById('historyListContainer');
   if (!records || records.length === 0) {
@@ -595,22 +653,49 @@ function renderHistoryTable(records) {
     '</tr></thead><tbody>';
 
   records.forEach(function(d){
+    var safeNum = esc(d.number);
     html += '<tr>' +
-      '<td><strong>' + esc(d.number) + '</strong></td>' +
+      '<td><span class="record-link" onclick="toggleDetail(\'' + safeNum + '\')">' + safeNum + '</span></td>' +
       '<td>' + esc(d.issueDate || '-') + '</td>' +
       '<td>' + esc(d.fromDept || '-') + '</td>' +
       '<td>' + esc(d.toDept || '-') + '</td>' +
       '<td>' + esc(d.qualityCategory || '-') + '</td>' +
       '<td>' + esc(d.severity || '-') + '</td>' +
       '<td style="text-align:center; white-space:nowrap;">' +
-      '<button class="btn-sm" onclick="printHistoryRecord(\'' + esc(d.number) + '\')">列印</button> ' +
-      '<button class="btn-sm" style="background:var(--blue);" onclick="editHistoryRecord(\'' + esc(d.number) + '\')">編輯/矯正</button>' +
+      '<button class="btn-sm" onclick="printHistoryRecord(\'' + safeNum + '\')">列印</button> ' +
+      '<button class="btn-sm" style="background:var(--blue);" onclick="editHistoryRecord(\'' + safeNum + '\')">編輯</button> ' +
+      '<button class="btn-sm btn-danger" onclick="deleteHistoryRecord(\'' + safeNum + '\')">刪除</button>' +
       '</td>' +
-      '</tr>';
+      '</tr>' +
+      '<tr id="detail-row-' + safeNum + '" class="detail-dropdown-row" style="display:none;">' +
+      '<td colspan="7">' +
+      '<div class="detail-card">' +
+      '<strong style="color:var(--accent-ink); display:block; margin-bottom:10px;">單號 #' + safeNum + ' 完整內容檢視</strong>' +
+      '<div class="readonly-grid">' +
+      '<div class="readonly-item"><span>發文日期</span><strong>' + esc(d.issueDate || '-') + '</strong></div>' +
+      '<div class="readonly-item"><span>發文單位 / 人員</span><strong>' + esc(d.fromDept || '-') + ' / ' + esc(d.fromPeople || '-') + '</strong></div>' +
+      '<div class="readonly-item"><span>受文單位 / 人員</span><strong>' + esc(d.toDept || '-') + ' / ' + esc(d.toPeople || '-') + '</strong></div>' +
+      '<div class="readonly-item"><span>品質不符合類別</span><strong>' + esc(d.qualityCategory || '-') + '</strong></div>' +
+      '<div class="readonly-item"><span>品質處理方式</span><strong>' + esc(d.qualityAction || '-') + '</strong></div>' +
+      '<div class="readonly-item"><span>職安衛不符合類別</span><strong>' + esc(d.safetyCategory || '-') + '</strong></div>' +
+      '<div class="readonly-item"><span>不符合等級</span><strong>' + esc(d.severity || '-') + '</strong></div>' +
+      '<div class="readonly-item" style="grid-column: span 2;"><span>不符合內容說明</span><strong style="white-space:pre-wrap;">' + esc(d.description || '-') + '</strong></div>' +
+      '<div class="readonly-item" style="grid-column: span 2;"><span>矯正對策</span><strong style="white-space:pre-wrap;">' + esc(d.correctiveAction || '尚未填寫') + '</strong></div>' +
+      '<div class="readonly-item" style="grid-column: span 2;"><span>原因分析</span><strong style="white-space:pre-wrap;">' + esc(d.rootCause || '尚未填寫') + '</strong></div>' +
+      '<div class="readonly-item"><span>預計完成日期</span><strong>' + esc(d.dueDate || '-') + '</strong></div>' +
+      '</div></div></td></tr>';
   });
 
   html += '</tbody></table></div>';
   container.innerHTML = html;
+}
+
+// 切換顯示單據詳細內容
+function toggleDetail(num) {
+  var row = document.getElementById('detail-row-' + num);
+  if (row) {
+    row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
+  }
 }
 
 // 篩選歷史單據
@@ -637,12 +722,10 @@ function printHistoryRecord(num) {
   }
 }
 
-// 從歷史單據直接跳轉到第2頁進行矯正措施編輯
+// 從歷史單據跳轉至編輯頁面
 function editHistoryRecord(num) {
   showTab('blue');
-  // 讓下拉選單切換到該單號
   var select = document.getElementById('selectRecordNum');
-  // 確保 cloudRecords 已載入
   if (!window._cloudRecords) {
     window._cloudRecords = {};
     window._historyRecords.forEach(function(r){ window._cloudRecords[r.number] = r; });
