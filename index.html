@@ -1,162 +1,22 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>不符合及矯正措施單 (NCR)</title>
-    <!-- 引入 Apple 風格字型與簡約樣式 -->
-    <style>
-        :root {
-            --bg-color: #f5f5f7;
-            --card-bg: #ffffff;
-            --text-main: #1d1d1f;
-            --text-secondary: #86868b;
-            --accent-color: #0071e3;
-            --accent-hover: #0077ed;
-            --border-color: #d2d2d7;
-            --radius: 12px;
-        }
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- 引入 Firebase SDK (v10 模組化版本) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, doc, setDoc, getDocs, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro TC", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0;
-            padding: 40px 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 600px;
-            background-color: var(--card-bg);
-            border-radius: var(--radius);
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
-            padding: 40px;
-            box-sizing: border-box;
-        }
-
-        h2 {
-            font-size: 24px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            letter-spacing: -0.003em;
-        }
-
-        .subtitle {
-            font-size: 14px;
-            color: var(--text-secondary);
-            margin-bottom: 32px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            margin-bottom: 6px;
-        }
-
-        input[type="text"], 
-        textarea, 
-        select {
-            width: 100%;
-            padding: 12px 16px;
-            font-size: 15px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            background-color: #fff;
-            color: var(--text-main);
-            box-sizing: border-box;
-            transition: border-color 0.2s, box-shadow 0.2s;
-            outline: none;
-        }
-
-        input[type="text"]:focus, 
-        textarea:focus, 
-        select:focus {
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.12);
-        }
-
-        textarea {
-            resize: vertical;
-            height: 100px;
-        }
-
-        button {
-            width: 100%;
-            background-color: var(--accent-color);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 14px;
-            font-size: 16px;
-            font-weight: 500;
-            cursor: pointer;
-            margin-top: 12px;
-            transition: background-color 0.2s;
-        }
-
-        button:hover {
-            background-color: var(--accent-hover);
-        }
-
-        .status-msg {
-            margin-top: 16px;
-            text-align: center;
-            font-size: 14px;
-            color: #34c759;
-            display: none;
-        }
-    </style>
-</head>
-<body>
-
-    <div class="container">
-        <h2>不符合及矯正措施單</h2>
-        <div class="subtitle">表號: PA-21 202001V03</div>
-
-        <form id="ncrForm">
-            <div class="form-group">
-                <label for="formNo">表單編號 / 記錄名稱</label>
-                <input type="text" id="formNo" value="PA-21" required>
-            </div>
-
-            <div class="form-group">
-                <label for="issueDesc">不符合事項描述</label>
-                <textarea id="issueDesc" placeholder="請詳細描述發生之不符合狀況..." required></textarea>
-            </div>
-
-            <div class="form-group">
-                <label for="rootCause">原因分析</label>
-                <textarea id="rootCause" placeholder="請填寫根本原因分析..." required></textarea>
-            </div>
-
-            <div class="form-group">
-                <label for="corrections">矯正及預防措施</label>
-                <textarea id="corrections" placeholder="請填寫因應的矯正與預防措施..." required></textarea>
-            </div>
-
-            <button type="submit" id="submitBtn">送出資料</button>
-            <div id="statusMsg" class="status-msg">資料已成功送出並儲存至 Firebase！</div>
-        </form>
-    </div>
-
-    <!-- 引入 Firebase SDK (採用現代 ES Module 寫法) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, collection, addDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-
-        // TODO: 請替換成你在 Firebase 專案設定中取得的設定碼
-        const firebaseConfig = {
+    // ==========================================
+    // 請將下方這段換成你在 Firebase 後台複製的真實金鑰
+    // ==========================================
+    const firebaseConfig = {
   apiKey: "AIzaSyCVAyuGB1Nqr1QuTBgDN5tC-CHReCb3Xrc",
   authDomain: "ncr-system-e64b0.firebaseapp.com",
   projectId: "ncr-system-e64b0",
@@ -166,44 +26,539 @@
   measurementId: "G-C37BSH2ZEB"
 };
 
-        // 初始化 Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
+    // 初始化 Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-        const form = document.getElementById('ncrForm');
-        const submitBtn = document.getElementById('submitBtn');
-        const statusMsg = document.getElementById('statusMsg');
+    // 將重要函式掛載到全域 window，讓 HTML 的 onclick 可以呼叫
+    window.saveToFirebase = async function() {
+      var data = collectFormData();
+      if (!data.number) {
+        document.getElementById('msg').textContent = '請填寫單號。';
+        return;
+      }
+      if (!data.fromDept || !data.toDept || !data.issueDate) {
+        document.getElementById('msg').textContent = '請至少填寫發文日期、發文單位、受文單位。';
+        return;
+      }
+      if (!data.qualityCategory) {
+        document.getElementById('msg').textContent = '請選擇品質不符合類別。';
+        return;
+      }
+      if (!data.qualityAction) {
+        document.getElementById('msg').textContent = '請選擇品質處理方式。';
+        return;
+      }
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            submitBtn.disabled = true;
-            submitBtn.textContent = '傳送中...';
+      var btn = document.getElementById('saveBtn');
+      btn.disabled = true;
+      btn.textContent = '儲存中…';
+      document.getElementById('msg').textContent = '';
 
-            const formData = {
-                formNo: document.getElementById('formNo').value,
-                issueDesc: document.getElementById('issueDesc').value,
-                rootCause: document.getElementById('rootCause').value,
-                corrections: document.getElementById('corrections').value,
-                createdAt: new Date().toISOString()
-            };
+      try {
+        // 使用單號作為 Firestore 的文件 ID，存在 ncr_data 集合中
+        await setDoc(doc(db, "ncr_data", data.number), data, { merge: true });
+        btn.disabled = false;
+        btn.textContent = '儲存並列印';
+        openPrintWindow(data);
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '儲存並列印';
+        document.getElementById('msg').textContent = '儲存失敗：' + err.message;
+        console.error(err);
+      }
+    };
 
-            try {
-                // 將資料寫入先前建立的 records 集合（或是改成你的集合名稱）
-                await addDoc(collection(db, "records"), formData);
-                
-                statusMsg.style.display = 'block';
-                form.reset();
-                setTimeout(() => {
-                    statusMsg.style.display = 'none';
-                }, 3000);
-            } catch (error) {
-                console.error("寫入錯誤：", error);
-                alert("送出失敗，請檢查網路或 Firebase 設定。");
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.textContent = '送出資料';
-            }
+    window.loadExistingRecordsFromCloud = async function() {
+      var select = document.getElementById('selectRecordNum');
+      select.innerHTML = '<option value="">-- 載入中... --</option>';
+      try {
+        var querySnapshot = await getDocs(collection(db, "ncr_data"));
+        select.innerHTML = '<option value="">-- 請先選擇現有單號 --</option>';
+        window._cloudRecords = {};
+        querySnapshot.forEach((docSnap) => {
+          var rec = docSnap.data();
+          window._cloudRecords[rec.number] = rec;
+          var opt = document.createElement('option');
+          opt.value = rec.number;
+          opt.textContent = '單號：' + rec.number + (rec.fromDept ? ' (' + rec.fromDept + ')' : '');
+          select.appendChild(opt);
         });
-    </script>
+      } catch (err) {
+        console.error('載入單號失敗', err);
+        select.innerHTML = '<option value="">-- 載入失敗，請重新整理 --</option>';
+      }
+    };
+
+    window.saveCorrectiveToCloud = async function() {
+      var select = document.getElementById('selectRecordNum');
+      var num = select.value;
+      if (!num) {
+        document.getElementById('msgBlue').textContent = '請先選擇單號。';
+        return;
+      }
+
+      var payload = {
+        correctiveAction: document.getElementById('correctiveAction').value,
+        rootCause: document.getElementById('rootCause').value,
+        dueDate: document.getElementById('dueDate').value
+      };
+
+      var btn = document.getElementById('saveCorrectiveBtn');
+      btn.disabled = true;
+      btn.textContent = '儲存中…';
+      document.getElementById('msgBlue').textContent = '';
+
+      try {
+        var docRef = doc(db, "ncr_data", num);
+        await updateDoc(docRef, payload);
+        btn.disabled = false;
+        btn.textContent = '儲存矯正措施';
+        alert('矯正措施儲存成功！');
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '儲存矯正措施';
+        document.getElementById('msgBlue').textContent = '儲存失敗：' + err.message;
+        console.error(err);
+      }
+    };
+  </script>
+
+  <style>
+    :root{
+      --bg:#EEF0F3;
+      --surface:#FFFFFF;
+      --ink:#20293A;
+      --muted:#6B7686;
+      --line:#E2E5EA;
+      --line-strong:#CBD1DA;
+      --accent:#1F5C6B;
+      --accent-ink:#123842;
+      --accent-soft:#E4EEF0;
+      --amber:#B4790E;
+      --blue:#3568B0;
+      --green:#2E8B57;
+      --danger:#B23B3B;
+      --radius:10px;
+    }
+    *{ box-sizing:border-box; }
+    html,body{ margin:0; padding:0; }
+    body{
+      font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',-apple-system,sans-serif;
+      background:var(--bg);
+      color:var(--ink);
+      font-size:14px;
+      line-height:1.6;
+      -webkit-font-smoothing:antialiased;
+    }
+
+    .page{ max-width:800px; margin:32px auto 60px; padding:0 16px; }
+
+    .card{
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:14px;
+      overflow:hidden;
+      box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+    }
+    .card-top-bar{ height:4px; background:linear-gradient(90deg,var(--accent),var(--blue)); }
+
+    header{ padding:28px 36px 20px; border-bottom:1px solid var(--line); }
+    .header-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+    header h1{ margin:0; font-size:19px; font-weight:700; letter-spacing:.02em; }
+    header h2{ margin:4px 0 0; font-size:14px; font-weight:500; color:var(--muted); }
+    .form-code{
+      font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
+      background:var(--bg); border:1px solid var(--line); border-radius:6px;
+      padding:4px 8px; white-space:nowrap;
+    }
+
+    /* ---- Tabs / stepper ---- */
+    .tabs{ display:flex; padding:0 36px; border-bottom:1px solid var(--line); background:var(--surface); }
+    .tab-btn{
+      appearance:none; background:none; border:none; cursor:pointer;
+      display:flex; align-items:center; gap:8px;
+      padding:16px 18px 14px; margin-right:6px;
+      font-family:inherit; font-size:13.5px; font-weight:500; color:var(--muted);
+      border-bottom:2px solid transparent; transition:color .15s ease, border-color .15s ease;
+    }
+    .tab-btn:hover{ color:var(--ink); }
+    .tab-btn.active{ color:var(--ink); border-bottom-color:var(--accent); font-weight:600; }
+    .dot{ width:8px; height:8px; border-radius:50%; flex:none; }
+    .dot.amber{ background:var(--amber); }
+    .dot.blue{ background:var(--blue); }
+    .dot.green{ background:var(--green); }
+    .step-no{
+      font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
+      background:var(--bg); border-radius:50%; width:18px; height:18px;
+      display:flex; align-items:center; justify-content:center; flex:none;
+    }
+    .tab-btn.active .step-no{ background:var(--accent); color:#fff; }
+
+    .tab-panel{ display:none; padding:32px 36px 36px; }
+    .tab-panel.active{ display:block; }
+
+    /* ---- Sections ---- */
+    .section{ margin-bottom:28px; }
+    .section:last-child{ margin-bottom:0; }
+    .section-heading{
+      display:flex; align-items:baseline; gap:4px;
+      font-size:13px; font-weight:600; color:var(--ink);
+      margin:0 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line);
+    }
+    .req{ color:var(--danger); font-weight:700; }
+
+    .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px 20px; }
+    @media (max-width:640px){ .grid{ grid-template-columns:1fr; } }
+
+    .field label{
+      display:block; font-size:12.5px; font-weight:500; color:var(--muted); margin-bottom:6px;
+    }
+    input[type=text], input[type=number], input[type=date], select, textarea{
+      width:100%; font-family:inherit; font-size:14px; color:var(--ink);
+      padding:9px 12px; border:1px solid var(--line-strong); border-radius:8px;
+      background:var(--surface); transition:border-color .15s ease, box-shadow .15s ease;
+    }
+    input[type=text]:focus, input[type=number]:focus, input[type=date]:focus, select:focus, textarea:focus{
+      outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);
+    }
+    textarea{ resize:vertical; min-height:90px; }
+
+    /* ---- Chip choices ---- */
+    .chip-group{ display:flex; flex-wrap:wrap; gap:8px; }
+    .chip{ position:relative; display:inline-flex; }
+    .chip input{ position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; }
+    .chip span{
+      display:inline-flex; align-items:center; padding:7px 14px;
+      border:1px solid var(--line-strong); border-radius:20px;
+      font-size:13px; color:var(--ink); background:var(--surface);
+      transition:background .15s ease, border-color .15s ease, color .15s ease;
+      pointer-events:none;
+    }
+    .chip input:checked + span{ background:var(--accent); border-color:var(--accent); color:#fff; }
+
+    .severity-row{ display:flex; gap:10px; }
+    .severity-chip{ position:relative; flex:1; }
+    .severity-chip input{ position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; }
+    .severity-chip span{
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      padding:12px; border:1px solid var(--line-strong); border-radius:8px;
+      font-size:13.5px; font-weight:500; color:var(--ink); pointer-events:none;
+      transition:all .15s ease;
+    }
+    .severity-chip input:checked + span{ border-color:var(--danger); background:#FBEEEE; color:var(--danger); }
+    .severity-chip.minor input:checked + span{ border-color:var(--amber); background:#FBF3E3; color:var(--amber); }
+
+    /* ---- Footer / actions ---- */
+    .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }
+    .msg{ font-size:12.5px; color:var(--danger); margin-right:auto; }
+    button.primary{
+      appearance:none; border:none; cursor:pointer; font-family:inherit;
+      background:var(--accent); color:#fff; font-size:14px; font-weight:600;
+      padding:11px 26px; border-radius:8px; transition:background .15s ease;
+    }
+    button.primary:hover{ background:var(--accent-ink); }
+    button.primary:disabled{ background:var(--line-strong); color:var(--muted); cursor:default; }
+
+    .readonly-box{ background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:20px; }
+    .readonly-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px 16px; font-size:13.5px; }
+    .readonly-item span{ color:var(--muted); display:block; font-size:12px; margin-bottom:2px; }
+
+    .placeholder{
+      border:1px dashed var(--line-strong); border-radius:10px;
+      padding:36px 24px; text-align:center; color:var(--muted); font-size:13.5px; line-height:1.8;
+    }
+    .placeholder strong{ color:var(--ink); font-weight:600; }
+  </style>
+</head>
+<body>
+
+<div class="page">
+  <div class="card">
+    <div class="card-top-bar"></div>
+
+    <header>
+      <div class="header-row">
+        <div>
+          <h1>永隆工程股份有限公司</h1>
+          <h2>不符合及矯正措施單</h2>
+        </div>
+        <div class="form-code">PA-21 · 202001V03</div>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="yellow" onclick="showTab('yellow')">
+        <span class="step-no">1</span><span class="dot amber"></span>發起填寫
+      </button>
+      <button class="tab-btn" data-tab="blue" onclick="showTab('blue')">
+        <span class="step-no">2</span><span class="dot blue"></span>矯正措施
+      </button>
+      <button class="tab-btn" data-tab="green" onclick="showTab('green')">
+        <span class="step-no">3</span><span class="dot green"></span>成果確認
+      </button>
+    </div>
+
+    <!-- 第1頁: 發起填寫 -->
+    <div class="tab-panel active" id="panel-yellow">
+      <div class="section">
+        <p class="section-heading">單號 <span class="req">*</span></p>
+        <div class="field" style="max-width:220px;">
+          <input type="text" id="recordNumber" placeholder="請手動輸入單號">
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="section-heading">發文日期</p>
+        <div class="field" style="max-width:220px;">
+          <input type="date" id="issueDate">
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="section-heading">發文 / 受文資訊</p>
+        <div class="grid">
+          <div class="field"><label>發文單位</label><input type="text" id="fromDept" placeholder="例：品管工廠"></div>
+          <div class="field"><label>人員</label><input type="text" id="fromPeople"></div>
+        </div>
+        <div class="grid" style="margin-top:16px;">
+          <div class="field"><label>受文單位</label><input type="text" id="toDept" placeholder="例：管理部"></div>
+          <div class="field"><label>人員</label><input type="text" id="toPeople"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="section-heading">品質不符合類別 <span class="req">*</span></p>
+        <div class="chip-group" id="qualityCategory">
+          <label class="chip"><input type="radio" name="qualityCategory" value="政策"><span>政策</span></label>
+          <label class="chip"><input type="radio" name="qualityCategory" value="材料"><span>材料</span></label>
+          <label class="chip"><input type="radio" name="qualityCategory" value="儀器/量具"><span>儀器/量具</span></label>
+          <label class="chip"><input type="radio" name="qualityCategory" value="施工品質"><span>施工品質</span></label>
+          <label class="chip"><input type="radio" name="qualityCategory" value="其他"><span>其他</span></label>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="section-heading">品質處理方式 <span class="req">*</span></p>
+        <div class="chip-group" id="qualityAction">
+          <label class="chip"><input type="radio" name="qualityAction" value="修改/重工"><span>修改/重工</span></label>
+          <label class="chip"><input type="radio" name="qualityAction" value="報廢"><span>報廢</span></label>
+          <label class="chip"><input type="radio" name="qualityAction" value="拒收/退貨"><span>拒收/退貨</span></label>
+          <label class="chip"><input type="radio" name="qualityAction" value="照現況使用"><span>照現況使用</span></label>
+          <label class="chip"><input type="radio" name="qualityAction" value="其他"><span>其他</span></label>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="section-heading">職安衛不符合類別</p>
+        <div class="chip-group" id="safetyCategory">
+          <label class="chip"><input type="radio" name="safetyCategory" value="監督量測"><span>監督量測</span></label>
+          <label class="chip"><input type="radio" name="safetyCategory" value="法規不符合"><span>法規不符合</span></label>
+          <label class="chip"><input type="radio" name="safetyCategory" value="管理審查會議"><span>管理審查會議</span></label>
+          <label class="chip"><input type="radio" name="safetyCategory" value="內部稽核"><span>內部稽核</span></label>
+          <label class="chip"><input type="radio" name="safetyCategory" value="外部稽核"><span>外部稽核</span></label>
+          <label class="chip"><input type="radio" name="safetyCategory" value="環境巡查"><span>環境巡查</span></label>
+          <label class="chip"><input type="radio" name="safetyCategory" value="環安衛事件"><span>環安衛事件</span></label>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="section-heading">不符合等級</p>
+        <div class="severity-row" id="severity">
+          <label class="severity-chip minor"><input type="radio" name="severity" value="非重大異常"><span>非重大異常</span></label>
+          <label class="severity-chip"><input type="radio" name="severity" value="重大異常"><span>重大異常</span></label>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="section-heading">不符合內容說明（人 / 事 / 時 / 地 / 物）</p>
+        <textarea id="description" rows="4" placeholder="請描述事件經過…"></textarea>
+      </div>
+
+      <div class="actions">
+        <span class="msg" id="msg"></span>
+        <button class="primary" id="saveBtn" onclick="saveToFirebase()">儲存並列印</button>
+      </div>
+    </div>
+
+    <!-- 第2頁: 矯正措施 -->
+    <div class="tab-panel" id="panel-blue">
+      <div class="section">
+        <p class="section-heading">選擇單號 <span class="req">*</span></p>
+        <div class="field" style="max-width:280px;">
+          <select id="selectRecordNum" onchange="onSelectRecordChange()">
+            <option value="">-- 請先選擇現有單號 --</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="correctiveContainer" style="display:none;">
+        <div class="section">
+          <p class="section-heading">之前填過的資訊</p>
+          <div class="readonly-box">
+            <div class="readonly-grid">
+              <div class="readonly-item"><span>發文日期</span><strong id="ro-issueDate">-</strong></div>
+              <div class="readonly-item"><span>發文單位 / 人員</span><strong id="ro-from">-</strong></div>
+              <div class="readonly-item"><span>受文單位 / 人員</span><strong id="ro-to">-</strong></div>
+              <div class="readonly-item"><span>品質不符合類別</span><strong id="ro-qualityCategory">-</strong></div>
+              <div class="readonly-item"><span>品質處理方式</span><strong id="ro-qualityAction">-</strong></div>
+              <div class="readonly-item"><span>職安衛不符合類別</span><strong id="ro-safetyCategory">-</strong></div>
+              <div class="readonly-item"><span>不符合等級</span><strong id="ro-severity">-</strong></div>
+              <div class="readonly-item" style="grid-column: span 2;"><span>不符合內容說明</span><strong id="ro-description" style="white-space:pre-wrap;">-</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <p class="section-heading">矯正採取改善措施</p>
+          <div class="field" style="margin-bottom:16px;"><label>矯正對策</label><textarea id="correctiveAction" placeholder="請填寫矯正對策…"></textarea></div>
+          <div class="field" style="margin-bottom:16px;"><label>原因分析</label><textarea id="rootCause" placeholder="請填寫原因分析…"></textarea></div>
+          <div class="field" style="max-width:220px;"><label>預計完成日期</label><input type="date" id="dueDate"></div>
+        </div>
+
+        <div class="actions">
+          <span class="msg" id="msgBlue"></span>
+          <button class="primary" id="saveCorrectiveBtn" onclick="saveCorrectiveToCloud()">儲存矯正措施</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第3頁: 成果確認 -->
+    <div class="tab-panel" id="panel-green">
+      <div class="placeholder">
+        這一頁對應表單的<strong>「缺失改善成果確認」</strong>區塊<br>
+        （改善結果確認 / 最後完成日期 / 確認人員 / 單位主管）<br><br>
+        此區塊不在系統中填寫，列印出來的表單此處將維持空白，供後續人工簽核填寫。
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function showTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.tab === name);
+  });
+  document.querySelectorAll('.tab-panel').forEach(function(p){
+    p.classList.remove('active');
+  });
+  document.getElementById('panel-' + name).classList.add('active');
+
+  if (name === 'blue') {
+    loadExistingRecordsFromCloud();
+  }
+}
+
+function makeToggleable(groupName) {
+  var radios = document.querySelectorAll('input[name=' + groupName + ']');
+  radios.forEach(function(r){
+    r._wasChecked = r.checked;
+    r.addEventListener('click', function(){
+      if (r._wasChecked) { r.checked = false; r._wasChecked = false; }
+      else { radios.forEach(function(o){ o._wasChecked = (o === r); }); }
+    });
+  });
+}
+['qualityCategory', 'qualityAction', 'safetyCategory'].forEach(makeToggleable);
+
+function getRadioValue(name) {
+  var el = document.querySelector('input[name=' + name + ']:checked');
+  return el ? el.value : '';
+}
+
+function collectFormData() {
+  return {
+    number: document.getElementById('recordNumber').value.trim(),
+    fromDept: document.getElementById('fromDept').value,
+    fromPeople: document.getElementById('fromPeople').value,
+    toDept: document.getElementById('toDept').value,
+    toPeople: document.getElementById('toPeople').value,
+    issueDate: document.getElementById('issueDate').value,
+    qualityCategory: getRadioValue('qualityCategory'),
+    qualityAction: getRadioValue('qualityAction'),
+    safetyCategory: getRadioValue('safetyCategory'),
+    severity: getRadioValue('severity'),
+    description: document.getElementById('description').value,
+    correctiveAction: '',
+    rootCause: '',
+    dueDate: ''
+  };
+}
+
+function onSelectRecordChange() {
+  var select = document.getElementById('selectRecordNum');
+  var container = document.getElementById('correctiveContainer');
+  var num = select.value;
+
+  if (!num || !window._cloudRecords || !window._cloudRecords[num]) {
+    container.style.display = 'none';
+    return;
+  }
+
+  var d = window._cloudRecords[num];
+  document.getElementById('ro-issueDate').textContent = d.issueDate || '-';
+  document.getElementById('ro-from').textContent = (d.fromDept || '-') + ' / ' + (d.fromPeople || '-');
+  document.getElementById('ro-to').textContent = (d.toDept || '-') + ' / ' + (d.toPeople || '-');
+  document.getElementById('ro-qualityCategory').textContent = d.qualityCategory || '-';
+  document.getElementById('ro-qualityAction').textContent = d.qualityAction || '-';
+  document.getElementById('ro-safetyCategory').textContent = d.safetyCategory || '-';
+  document.getElementById('ro-severity').textContent = d.severity || '-';
+  document.getElementById('ro-description').textContent = d.description || '-';
+
+  document.getElementById('correctiveAction').value = d.correctiveAction || '';
+  document.getElementById('rootCause').value = d.rootCause || '';
+  document.getElementById('dueDate').value = d.dueDate || '';
+
+  container.style.display = 'block';
+}
+
+function mark(selected, value) {
+  return selected === value ? '■' : '□';
+}
+
+function openPrintWindow(d) {
+  var html = buildPrintHTML(d);
+  var w = window.open('', '_blank');
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  w.onload = function () { w.focus(); w.print(); };
+}
+
+function buildPrintHTML(d) {
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>不符合及矯正措施單 #' + d.number + '</title>' +
+  '<style>' +
+  'body{font-family:"Noto Sans TC",sans-serif;font-size:12px;color:#1A1A1A;margin:24px;}' +
+  'table{width:100%;border-collapse:collapse;}' +
+  'td,th{border:1px solid #333;padding:6px 8px;vertical-align:top;}' +
+  '.title{text-align:center;font-size:19px;font-weight:700;margin:0;}' +
+  '.subtitle{text-align:center;font-size:15px;font-weight:500;margin:5px 0 16px;color:#444;}' +
+  '.label{font-weight:600;white-space:nowrap;width:112px;background:#F7F7F5;}' +
+  '.section-title{text-align:center;font-weight:700;background:#EEF2F1;font-size:13px;}' +
+  '.tall{height:70px;}.tallest{height:100px;}.note{font-size:10px;margin-top:12px;line-height:1.7;}' +
+  '</style></head><body>' +
+  '<p class="title">永隆工程股份有限公司</p><p class="subtitle">不符合及矯正措施單</p>' +
+  '<table>' +
+  '<tr><td class="label">單號</td><td>' + d.number + '</td><td class="label" style="text-align:right;">(Q:品質，E:職安衛)</td></tr>' +
+  '<tr><td class="label">發文單位</td><td>' + esc(d.fromDept) + ' 人員：' + esc(d.fromPeople) + '</td><td class="label">發文日期：' + esc(d.issueDate) + '</td></tr>' +
+  '<tr><td class="label">受文單位</td><td colspan="2">' + esc(d.toDept) + ' 人員：' + esc(d.toPeople) + '</td></tr>' +
+  '<tr><td class="label">品質不符合類別</td><td colspan="2">' + mark(d.qualityCategory,'政策')+'政策 '+mark(d.qualityCategory,'材料')+'材料 '+mark(d.qualityCategory,'儀器/量具')+'儀器/量具 '+mark(d.qualityCategory,'施工品質')+'施工品質 '+mark(d.qualityCategory,'其他')+'其他</td></tr>' +
+  '<tr><td class="label">品質處理方式</td><td colspan="2">' + mark(d.qualityAction,'修改/重工')+'修改/重工 '+mark(d.qualityAction,'報廢')+'報廢 '+mark(d.qualityAction,'拒收/退貨')+'拒收/退貨 '+mark(d.qualityAction,'照現況使用')+'照現況使用 '+mark(d.qualityAction,'其他')+'其他</td></tr>' +
+  '<tr><td class="label">職安衛不符合類別</td><td colspan="2">' + mark(d.safetyCategory,'監督量測')+'監督量測 '+mark(d.safetyCategory,'法規不符合')+'法規不符合 '+mark(d.safetyCategory,'管理審查會議')+'管理審查會議 '+mark(d.safetyCategory,'內部稽核')+'內部稽核 '+mark(d.safetyCategory,'外部稽核')+'外部稽核 '+mark(d.safetyCategory,'環境巡查')+'環境巡查 '+mark(d.safetyCategory,'環安衛事件')+'環安衛事件</td></tr>' +
+  '<tr><td class="label">不符合等級</td><td colspan="2">' + mark(d.severity,'非重大異常')+'非重大異常 '+mark(d.severity,'重大異常')+'重大異常</td></tr>' +
+  '<tr><td class="label">不符合內容說明</td><td colspan="2" class="tallest">' + esc(d.description).replace(/\n/g,'<br>') + '</td></tr>' +
+  '<tr><td colspan="3" class="section-title">矯正採取改善措施</td></tr>' +
+  '<tr><td class="label">矯正對策</td><td colspan="2" class="tall">' + esc(d.correctiveAction).replace(/\n/g,'<br>') + '</td></tr>' +
+  '<tr><td class="label">原因分析</td><td colspan="2" class="tall">' + esc(d.rootCause).replace(/\n/g,'<br>') + '</td></tr>' +
+  '<tr><td class="label">預計完成日期</td><td colspan="2">' + esc(d.dueDate) + '</td></tr>' +
+  '</table></body></html>';
+}
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
 </body>
 </html>
