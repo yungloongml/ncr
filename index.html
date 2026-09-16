@@ -87,6 +87,26 @@
       }
     };
 
+    // 新增：載入歷史單據列表
+    window.loadHistoryRecords = async function() {
+      var container = document.getElementById('historyListContainer');
+      container.innerHTML = '<div class="placeholder">資料載入中…</div>';
+      try {
+        var querySnapshot = await getDocs(collection(db, "ncr_data"));
+        window._historyRecords = [];
+        querySnapshot.forEach((docSnap) => {
+          window._historyRecords.push(docSnap.data());
+        });
+        
+        // 依照單號排序 (若為數字或字串排序)
+        window._historyRecords.sort((a, b) => (b.number || '').localeCompare(a.number || ''));
+        renderHistoryTable(window._historyRecords);
+      } catch (err) {
+        console.error('載入歷史單據失敗', err);
+        container.innerHTML = '<div class="placeholder">載入失敗，請檢查網路連線。</div>';
+      }
+    };
+
     window.saveCorrectiveToCloud = async function() {
       var select = document.getElementById('selectRecordNum');
       var num = select.value;
@@ -149,7 +169,6 @@
       -webkit-font-smoothing:antialiased;
     }
 
-    /* 滿版無卡片設計 */
     .page{ max-width:960px; margin:0 auto; padding:24px 20px 60px; }
 
     .card{
@@ -172,13 +191,14 @@
     }
 
     /* ---- Tabs ---- */
-    .tabs{ display:flex; padding:0; border-bottom:1px solid var(--line); background:transparent; margin-bottom:28px; }
+    .tabs{ display:flex; padding:0; border-bottom:1px solid var(--line); background:transparent; margin-bottom:28px; overflow-x:auto; }
     .tab-btn{
       appearance:none; background:none; border:none; cursor:pointer;
       display:flex; align-items:center; gap:8px;
       padding:12px 18px; margin-right:8px;
       font-family:inherit; font-size:13.5px; font-weight:500; color:var(--muted);
       border-bottom:2px solid transparent; transition:color .15s ease, border-color .15s ease;
+      white-space:nowrap;
     }
     .tab-btn:hover{ color:var(--ink); }
     .tab-btn.active{ color:var(--accent-ink); border-bottom-color:var(--accent); font-weight:600; }
@@ -186,6 +206,7 @@
     .dot.amber{ background:var(--amber); }
     .dot.blue{ background:var(--blue); }
     .dot.green{ background:var(--green); }
+    .dot.purple{ background:var(--danger); }
     .step-no{
       font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
       background:var(--line); border-radius:50%; width:18px; height:18px;
@@ -196,7 +217,7 @@
     .tab-panel{ display:none; }
     .tab-panel.active{ display:block; }
 
-    /* ---- Sections (改用乾淨的區塊面板風格) ---- */
+    /* ---- Sections ---- */
     .section{
       background:var(--surface);
       border:1px solid var(--line);
@@ -253,6 +274,18 @@
     .severity-chip input:checked + span{ border-color:var(--danger); background:#FEF2F2; color:var(--danger); }
     .severity-chip.minor input:checked + span{ border-color:var(--amber); background:#FFFBEB; color:var(--amber); }
 
+    /* ---- Table for History ---- */
+    .table-container{ width:100%; overflow-x:auto; }
+    .history-table{ width:100%; border-collapse:collapse; text-align:left; font-size:13.5px; }
+    .history-table th, .history-table td{ padding:12px 14px; border-bottom:1px solid var(--line); }
+    .history-table th{ font-weight:600; color:var(--muted); background:var(--bg); }
+    .history-table tr:hover td{ background:var(--accent-soft); }
+    .btn-sm{
+      background:var(--accent); color:#fff; border:none; padding:5px 10px; border-radius:6px;
+      cursor:pointer; font-size:12px; font-family:inherit;
+    }
+    .btn-sm:hover{ background:var(--accent-ink); }
+
     /* ---- Footer / actions ---- */
     .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:24px; padding:0 4px; }
     .msg{ font-size:12.5px; color:var(--danger); margin-right:auto; }
@@ -301,6 +334,9 @@
       </button>
       <button class="tab-btn" data-tab="green" onclick="showTab('green')">
         <span class="step-no">3</span><span class="dot green"></span>成果確認
+      </button>
+      <button class="tab-btn" data-tab="history" onclick="showTab('history')">
+        <span class="step-no">4</span><span class="dot purple"></span>歷史單據
       </button>
     </div>
 
@@ -437,6 +473,25 @@
       </div>
     </div>
 
+    <!-- 第4頁: 歷史單據 -->
+    <div class="tab-panel" id="panel-history">
+      <div class="section">
+        <p class="section-heading">搜尋與過濾歷史單據</p>
+        <div class="field" style="max-width:100%;">
+          <input type="text" id="historySearchInput" placeholder="輸入單號、發文單位或關鍵字進行即時搜尋…" oninput="filterHistoryRecords()">
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="section-heading">已儲存單據列表</p>
+        <div id="historyListContainer">
+          <div class="placeholder">請切換至此分頁以自動載入歷史單據，或點擊下方按鈕重新整理。<br><br>
+            <button class="btn-sm" style="padding: 8px 16px;" onclick="loadHistoryRecords()">重新載入列表</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -452,6 +507,8 @@ function showTab(name) {
 
   if (name === 'blue') {
     loadExistingRecordsFromCloud();
+  } else if (name === 'history') {
+    loadHistoryRecords();
   }
 }
 
@@ -516,6 +573,82 @@ function onSelectRecordChange() {
   document.getElementById('dueDate').value = d.dueDate || '';
 
   container.style.display = 'block';
+}
+
+// 歷史單據列表渲染
+function renderHistoryTable(records) {
+  var container = document.getElementById('historyListContainer');
+  if (!records || records.length === 0) {
+    container.innerHTML = '<div class="placeholder">目前沒有任何歷史單據紀錄。</div>';
+    return;
+  }
+
+  var html = '<div class="table-container"><table class="history-table">' +
+    '<thead><tr>' +
+    '<th>單號</th>' +
+    '<th>發文日期</th>' +
+    '<th>發文單位</th>' +
+    '<th>受文單位</th>' +
+    '<th>品質類別</th>' +
+    '<th>等級</th>' +
+    '<th style="text-align:center;">操作</th>' +
+    '</tr></thead><tbody>';
+
+  records.forEach(function(d){
+    html += '<tr>' +
+      '<td><strong>' + esc(d.number) + '</strong></td>' +
+      '<td>' + esc(d.issueDate || '-') + '</td>' +
+      '<td>' + esc(d.fromDept || '-') + '</td>' +
+      '<td>' + esc(d.toDept || '-') + '</td>' +
+      '<td>' + esc(d.qualityCategory || '-') + '</td>' +
+      '<td>' + esc(d.severity || '-') + '</td>' +
+      '<td style="text-align:center; white-space:nowrap;">' +
+      '<button class="btn-sm" onclick="printHistoryRecord(\'' + esc(d.number) + '\')">列印</button> ' +
+      '<button class="btn-sm" style="background:var(--blue);" onclick="editHistoryRecord(\'' + esc(d.number) + '\')">編輯/矯正</button>' +
+      '</td>' +
+      '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+// 篩選歷史單據
+function filterHistoryRecords() {
+  var keyword = document.getElementById('historySearchInput').value.trim().toLowerCase();
+  if (!window._historyRecords) return;
+
+  var filtered = window._historyRecords.filter(function(d) {
+    return (d.number && d.number.toLowerCase().includes(keyword)) ||
+           (d.fromDept && d.fromDept.toLowerCase().includes(keyword)) ||
+           (d.toDept && d.toDept.toLowerCase().includes(keyword)) ||
+           (d.qualityCategory && d.qualityCategory.toLowerCase().includes(keyword)) ||
+           (d.description && d.description.toLowerCase().includes(keyword));
+  });
+
+  renderHistoryTable(filtered);
+}
+
+// 從歷史單據直接列印
+function printHistoryRecord(num) {
+  var record = window._historyRecords.find(function(r) { return r.number === num; });
+  if (record) {
+    openPrintWindow(record);
+  }
+}
+
+// 從歷史單據直接跳轉到第2頁進行矯正措施編輯
+function editHistoryRecord(num) {
+  showTab('blue');
+  // 讓下拉選單切換到該單號
+  var select = document.getElementById('selectRecordNum');
+  // 確保 cloudRecords 已載入
+  if (!window._cloudRecords) {
+    window._cloudRecords = {};
+    window._historyRecords.forEach(function(r){ window._cloudRecords[r.number] = r; });
+  }
+  select.value = num;
+  onSelectRecordChange();
 }
 
 function mark(selected, value) {
