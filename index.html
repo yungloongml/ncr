@@ -11,20 +11,18 @@
   <!-- 引入 Firebase SDK (v10 模組化版本) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, doc, setDoc, getDocs, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, getDocs, updateDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // ==========================================
-    // 請將下方這段換成你在 Firebase 後台複製的真實金鑰
-    // ==========================================
+    // 已代入你的 Firebase 設定
     const firebaseConfig = {
-  apiKey: "AIzaSyCVAyuGB1Nqr1QuTBgDN5tC-CHReCb3Xrc",
-  authDomain: "ncr-system-e64b0.firebaseapp.com",
-  projectId: "ncr-system-e64b0",
-  storageBucket: "ncr-system-e64b0.firebasestorage.app",
-  messagingSenderId: "1021343354838",
-  appId: "1:1021343354838:web:0f4bf278f50b484e6fde77",
-  measurementId: "G-C37BSH2ZEB"
-};
+      apiKey: "AIzaSyCVAyuGB1Nqr1QuTBgDN5tC-CHReCb3Xrc",
+      authDomain: "ncr-system-e64b0.firebaseapp.com",
+      projectId: "ncr-system-e64b0",
+      storageBucket: "ncr-system-e64b0.firebasestorage.app",
+      messagingSenderId: "1021343354838",
+      appId: "1:1021343354838:web:0f4bf278f50b484e6fde77",
+      measurementId: "G-C37BSH2ZEB"
+    };
 
     // 初始化 Firebase
     const app = initializeApp(firebaseConfig);
@@ -56,7 +54,6 @@
       document.getElementById('msg').textContent = '';
 
       try {
-        // 使用單號作為 Firestore 的文件 ID，存在 ncr_data 集合中
         await setDoc(doc(db, "ncr_data", data.number), data, { merge: true });
         btn.disabled = false;
         btn.textContent = '儲存並列印';
@@ -126,19 +123,19 @@
 
   <style>
     :root{
-      --bg:#EEF0F3;
+      --bg:#F4F6F8;
       --surface:#FFFFFF;
-      --ink:#20293A;
-      --muted:#6B7686;
-      --line:#E2E5EA;
-      --line-strong:#CBD1DA;
-      --accent:#1F5C6B;
-      --accent-ink:#123842;
-      --accent-soft:#E4EEF0;
-      --amber:#B4790E;
-      --blue:#3568B0;
-      --green:#2E8B57;
-      --danger:#B23B3B;
+      --ink:#1E293B;
+      --muted:#64748B;
+      --line:#E2E8F0;
+      --line-strong:#CBD5E1;
+      --accent:#0F766E;
+      --accent-ink:#134E4A;
+      --accent-soft:#F0FDFA;
+      --amber:#D97706;
+      --blue:#2563EB;
+      --green:#16A34A;
+      --danger:#DC2626;
       --radius:10px;
     }
     *{ box-sizing:border-box; }
@@ -152,58 +149,65 @@
       -webkit-font-smoothing:antialiased;
     }
 
-    .page{ max-width:800px; margin:32px auto 60px; padding:0 16px; }
+    /* 滿版無卡片設計 */
+    .page{ max-width:960px; margin:0 auto; padding:24px 20px 60px; }
 
     .card{
-      background:var(--surface);
-      border:1px solid var(--line);
-      border-radius:14px;
-      overflow:hidden;
-      box-shadow:0 1px 2px rgba(16,24,40,.04), 0 8px 24px rgba(16,24,40,.05);
+      background:transparent;
+      border:none;
+      border-radius:0;
+      overflow:visible;
+      box-shadow:none;
     }
-    .card-top-bar{ height:4px; background:linear-gradient(90deg,var(--accent),var(--blue)); }
+    .card-top-bar{ display:none; }
 
-    header{ padding:28px 36px 20px; border-bottom:1px solid var(--line); }
+    header{ padding:12px 0 24px; border-bottom:1px solid var(--line); margin-bottom:24px; }
     .header-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
-    header h1{ margin:0; font-size:19px; font-weight:700; letter-spacing:.02em; }
-    header h2{ margin:4px 0 0; font-size:14px; font-weight:500; color:var(--muted); }
+    header h1{ margin:0; font-size:20px; font-weight:700; letter-spacing:.01em; color:var(--ink); }
+    header h2{ margin:4px 0 0; font-size:13.5px; font-weight:500; color:var(--muted); }
     .form-code{
       font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
-      background:var(--bg); border:1px solid var(--line); border-radius:6px;
-      padding:4px 8px; white-space:nowrap;
+      background:var(--surface); border:1px solid var(--line); border-radius:6px;
+      padding:4px 10px; white-space:nowrap; align-self:center;
     }
 
-    /* ---- Tabs / stepper ---- */
-    .tabs{ display:flex; padding:0 36px; border-bottom:1px solid var(--line); background:var(--surface); }
+    /* ---- Tabs ---- */
+    .tabs{ display:flex; padding:0; border-bottom:1px solid var(--line); background:transparent; margin-bottom:28px; }
     .tab-btn{
       appearance:none; background:none; border:none; cursor:pointer;
       display:flex; align-items:center; gap:8px;
-      padding:16px 18px 14px; margin-right:6px;
+      padding:12px 18px; margin-right:8px;
       font-family:inherit; font-size:13.5px; font-weight:500; color:var(--muted);
       border-bottom:2px solid transparent; transition:color .15s ease, border-color .15s ease;
     }
     .tab-btn:hover{ color:var(--ink); }
-    .tab-btn.active{ color:var(--ink); border-bottom-color:var(--accent); font-weight:600; }
+    .tab-btn.active{ color:var(--accent-ink); border-bottom-color:var(--accent); font-weight:600; }
     .dot{ width:8px; height:8px; border-radius:50%; flex:none; }
     .dot.amber{ background:var(--amber); }
     .dot.blue{ background:var(--blue); }
     .dot.green{ background:var(--green); }
     .step-no{
       font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted);
-      background:var(--bg); border-radius:50%; width:18px; height:18px;
+      background:var(--line); border-radius:50%; width:18px; height:18px;
       display:flex; align-items:center; justify-content:center; flex:none;
     }
     .tab-btn.active .step-no{ background:var(--accent); color:#fff; }
 
-    .tab-panel{ display:none; padding:32px 36px 36px; }
+    .tab-panel{ display:none; }
     .tab-panel.active{ display:block; }
 
-    /* ---- Sections ---- */
-    .section{ margin-bottom:28px; }
-    .section:last-child{ margin-bottom:0; }
+    /* ---- Sections (改用乾淨的區塊面板風格) ---- */
+    .section{
+      background:var(--surface);
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:22px 24px;
+      margin-bottom:20px;
+      box-shadow:0 1px 2px rgba(0,0,0,.02);
+    }
     .section-heading{
       display:flex; align-items:baseline; gap:4px;
-      font-size:13px; font-weight:600; color:var(--ink);
+      font-size:13.5px; font-weight:600; color:var(--ink);
       margin:0 0 14px; padding-bottom:8px; border-bottom:1px solid var(--line);
     }
     .req{ color:var(--danger); font-weight:700; }
@@ -246,16 +250,16 @@
       font-size:13.5px; font-weight:500; color:var(--ink); pointer-events:none;
       transition:all .15s ease;
     }
-    .severity-chip input:checked + span{ border-color:var(--danger); background:#FBEEEE; color:var(--danger); }
-    .severity-chip.minor input:checked + span{ border-color:var(--amber); background:#FBF3E3; color:var(--amber); }
+    .severity-chip input:checked + span{ border-color:var(--danger); background:#FEF2F2; color:var(--danger); }
+    .severity-chip.minor input:checked + span{ border-color:var(--amber); background:#FFFBEB; color:var(--amber); }
 
     /* ---- Footer / actions ---- */
-    .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:32px; padding-top:20px; border-top:1px solid var(--line); }
+    .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:24px; padding:0 4px; }
     .msg{ font-size:12.5px; color:var(--danger); margin-right:auto; }
     button.primary{
       appearance:none; border:none; cursor:pointer; font-family:inherit;
       background:var(--accent); color:#fff; font-size:14px; font-weight:600;
-      padding:11px 26px; border-radius:8px; transition:background .15s ease;
+      padding:11px 28px; border-radius:8px; transition:background .15s ease;
     }
     button.primary:hover{ background:var(--accent-ink); }
     button.primary:disabled{ background:var(--line-strong); color:var(--muted); cursor:default; }
@@ -265,8 +269,9 @@
     .readonly-item span{ color:var(--muted); display:block; font-size:12px; margin-bottom:2px; }
 
     .placeholder{
-      border:1px dashed var(--line-strong); border-radius:10px;
-      padding:36px 24px; text-align:center; color:var(--muted); font-size:13.5px; line-height:1.8;
+      background:var(--surface);
+      border:1px dashed var(--line-strong); border-radius:12px;
+      padding:48px 24px; text-align:center; color:var(--muted); font-size:13.5px; line-height:1.8;
     }
     .placeholder strong{ color:var(--ink); font-weight:600; }
   </style>
