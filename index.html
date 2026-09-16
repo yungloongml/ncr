@@ -13,7 +13,6 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getFirestore, collection, doc, setDoc, getDocs, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    // 已代入你的 Firebase 設定
     const firebaseConfig = {
       apiKey: "AIzaSyCVAyuGB1Nqr1QuTBgDN5tC-CHReCb3Xrc",
       authDomain: "ncr-system-e64b0.firebaseapp.com",
@@ -24,7 +23,6 @@
       measurementId: "G-C37BSH2ZEB"
     };
 
-    // 初始化 Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
@@ -258,8 +256,11 @@
     .tab-panel{ display:none; }
     .tab-panel.active{ display:block; }
 
-    /* 分頁標題樣式 */
+    /* 分頁標題樣式（含線條圖示） */
     .panel-title{
+      display:flex;
+      align-items:center;
+      gap:10px;
       font-size:20px;
       font-weight:700;
       color:var(--accent-ink);
@@ -267,9 +268,18 @@
       padding-bottom:10px;
       border-bottom:2px solid var(--accent);
     }
+    .panel-title svg {
+      width: 22px;
+      height: 22px;
+      stroke: var(--accent);
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
 
     .section{
-      background:transparent;
+      background:var(--surface);
       border:none;
       border-bottom:1px solid var(--line);
       border-radius:0;
@@ -300,12 +310,19 @@
       outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);
     }
     
-    /* 調整說明文字輸入框，使其變得更高 */
     textarea{ resize:vertical; min-height:160px; }
 
-    /* 單位與人員欄位長度縮短一半（設定最大寬度） */
+    /* 單位與人員欄位排版與間距靠近 */
     .half-width { max-width: 50%; }
     @media (max-width:640px){ .half-width { max-width: 100%; } }
+
+    .unit-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .unit-row .field:first-child { flex: 2; }
+    .unit-row .field:last-child { flex: 1; min-width: 130px; }
 
     .chip-group{ display:flex; flex-wrap:wrap; gap:8px; }
     .chip{ position:relative; display:inline-flex; }
@@ -319,7 +336,6 @@
     }
     .chip input:checked + span{ background:var(--accent); border-color:var(--accent); color:#fff; }
 
-    /* 等級選項按鈕縮短一半設定 */
     .severity-row{ display:flex; gap:10px; max-width: 50%; }
     @media (max-width:640px){ .severity-row { max-width: 100%; } }
     .severity-chip{ position:relative; flex:1; }
@@ -403,7 +419,10 @@
 
       <!-- 第1頁: 新增單號 -->
       <div class="tab-panel active" id="panel-yellow">
-        <h3 class="panel-title">新增單號</h3>
+        <h3 class="panel-title">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          新增單號
+        </h3>
         
         <div class="section">
           <p class="section-heading">單號 <span class="req">*</span></p>
@@ -422,12 +441,20 @@
         <div class="section">
           <p class="section-heading">發文 / 受文資訊</p>
           <div class="grid">
-            <div class="field half-width"><label>發文單位</label><input type="text" id="fromDept" placeholder="例：品管工廠"></div>
-            <div class="field half-width"><label>人員</label><input type="text" id="fromPeople"></div>
+            <div class="half-width">
+              <div class="unit-row">
+                <div class="field"><label>發文單位</label><input type="text" id="fromDept" placeholder="例：品管工廠"></div>
+                <div class="field"><label>人員</label><input type="text" id="fromPeople"></div>
+              </div>
+            </div>
           </div>
           <div class="grid" style="margin-top:16px;">
-            <div class="field half-width"><label>受文單位</label><input type="text" id="toDept" placeholder="例：管理部"></div>
-            <div class="field half-width"><label>人員</label><input type="text" id="toPeople"></div>
+            <div class="half-width">
+              <div class="unit-row">
+                <div class="field"><label>受文單位</label><input type="text" id="toDept" placeholder="例：管理部"></div>
+                <div class="field"><label>人員</label><input type="text" id="toPeople"></div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -487,7 +514,10 @@
 
       <!-- 第2頁: 矯正措施 -->
       <div class="tab-panel" id="panel-blue">
-        <h3 class="panel-title">矯正措施</h3>
+        <h3 class="panel-title">
+          <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          矯正措施
+        </h3>
         
         <div class="section">
           <p class="section-heading">選擇單號 <span class="req">*</span></p>
@@ -531,7 +561,10 @@
 
       <!-- 第3頁: 成果確認 -->
       <div class="tab-panel" id="panel-green">
-        <h3 class="panel-title">成果確認</h3>
+        <h3 class="panel-title">
+          <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          成果確認
+        </h3>
         <div class="placeholder">
           這一頁對應表單的<strong>「缺失改善成果確認」</strong>區塊<br>
           （改善結果確認 / 最後完成日期 / 確認人員 / 單位主管）<br><br>
@@ -541,7 +574,10 @@
 
       <!-- 第4頁: 歷史單據 -->
       <div class="tab-panel" id="panel-history">
-        <h3 class="panel-title">歷史單據</h3>
+        <h3 class="panel-title">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          歷史單據
+        </h3>
         
         <div class="section">
           <p class="section-heading">搜尋與過濾歷史單據</p>
