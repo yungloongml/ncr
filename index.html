@@ -178,12 +178,6 @@
       -webkit-font-smoothing:antialiased;
     }
 
-    /* 各分頁專屬的微淡色背景（降低視覺疲勞與辨識分頁） */
-    body.tab-yellow { background: #FAF9F5; } /* 微暖白（發起填寫） */
-    body.tab-blue   { background: #F4F7FC; } /* 微柔藍（矯正措施） */
-    body.tab-green  { background: #F4F8F5; } /* 微淡綠（成果確認） */
-    body.tab-history{ background: #F7F5FA; } /* 微淡紫灰（歷史單據） */
-
     .app-layout{
       min-height:100vh;
       display:flex;
@@ -193,7 +187,7 @@
       .app-layout{ flex-direction:column; min-height:auto; }
     }
 
-    /* 左側直式選單 (滿版延伸) */
+    /* 左側直式選單 */
     .sidebar{
       width:240px;
       flex:none;
@@ -235,7 +229,7 @@
     .tab-btn:hover{ background:rgba(0,0,0,0.03); color:var(--ink); }
     .tab-btn.active{ background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
 
-    /* 主內容區填滿右側，不再有限寬卡片限制 */
+    /* 主內容區 */
     .main-content{ 
       flex:1; 
       min-width:0; 
@@ -250,7 +244,6 @@
       overflow:visible;
       box-shadow:none;
     }
-    .card-top-bar{ display:none; }
 
     header{ padding:0 0 20px; border-bottom:1px solid var(--line); margin-bottom:28px; }
     .header-row{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
@@ -265,7 +258,16 @@
     .tab-panel{ display:none; }
     .tab-panel.active{ display:block; }
 
-    /* 移除外圍獨立白框，改為乾淨的段落群組 */
+    /* 分頁標題樣式 */
+    .panel-title{
+      font-size:20px;
+      font-weight:700;
+      color:var(--accent-ink);
+      margin:0 0 24px;
+      padding-bottom:10px;
+      border-bottom:2px solid var(--accent);
+    }
+
     .section{
       background:transparent;
       border:none;
@@ -273,14 +275,13 @@
       border-radius:0;
       padding:20px 0;
       margin-bottom:8px;
-      box-shadow:none;
     }
     .section:last-of-type { border-bottom:none; }
 
     .section-heading{
       display:flex; align-items:baseline; gap:4px;
       font-size:13.5px; font-weight:600; color:var(--muted);
-      margin:0 0 10px; padding-bottom:0; border-bottom:none;
+      margin:0 0 10px;
     }
     .req{ color:var(--danger); font-weight:700; }
 
@@ -298,7 +299,13 @@
     input[type=text]:focus, input[type=number]:focus, input[type=date]:focus, select:focus, textarea:focus{
       outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);
     }
-    textarea{ resize:vertical; min-height:100px; }
+    
+    /* 調整說明文字輸入框，使其變得更高 */
+    textarea{ resize:vertical; min-height:160px; }
+
+    /* 單位與人員欄位長度縮短一半（設定最大寬度） */
+    .half-width { max-width: 50%; }
+    @media (max-width:640px){ .half-width { max-width: 100%; } }
 
     .chip-group{ display:flex; flex-wrap:wrap; gap:8px; }
     .chip{ position:relative; display:inline-flex; }
@@ -312,12 +319,14 @@
     }
     .chip input:checked + span{ background:var(--accent); border-color:var(--accent); color:#fff; }
 
-    .severity-row{ display:flex; gap:10px; }
+    /* 等級選項按鈕縮短一半設定 */
+    .severity-row{ display:flex; gap:10px; max-width: 50%; }
+    @media (max-width:640px){ .severity-row { max-width: 100%; } }
     .severity-chip{ position:relative; flex:1; }
     .severity-chip input{ position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; }
     .severity-chip span{
       display:flex; align-items:center; justify-content:center; gap:8px;
-      padding:12px; border:1px solid var(--line-strong); border-radius:8px;
+      padding:10px; border:1px solid var(--line-strong); border-radius:8px;
       font-size:13.5px; font-weight:500; color:var(--ink); pointer-events:none;
       transition:all .15s ease;
     }
@@ -365,14 +374,14 @@
     .placeholder strong{ color:var(--ink); font-weight:600; }
   </style>
 </head>
-<body class="tab-yellow">
+<body>
 
 <div class="app-layout">
   
   <!-- 左側選單 -->
   <div class="sidebar">
     <div class="tabs">
-      <button class="tab-btn active" data-tab="yellow" onclick="showTab('yellow')">發起填寫</button>
+      <button class="tab-btn active" data-tab="yellow" onclick="showTab('yellow')">新增單號</button>
       <button class="tab-btn" data-tab="blue" onclick="showTab('blue')">矯正措施</button>
       <button class="tab-btn" data-tab="green" onclick="showTab('green')">成果確認</button>
       <button class="tab-btn" data-tab="history" onclick="showTab('history')">歷史單據</button>
@@ -382,8 +391,6 @@
   <!-- 主要內容區 -->
   <div class="main-content">
     <div class="card">
-      <div class="card-top-bar"></div>
-
       <header>
         <div class="header-row">
           <div>
@@ -394,18 +401,20 @@
         </div>
       </header>
 
-      <!-- 第1頁: 發起填寫 -->
+      <!-- 第1頁: 新增單號 -->
       <div class="tab-panel active" id="panel-yellow">
+        <h3 class="panel-title">新增單號</h3>
+        
         <div class="section">
           <p class="section-heading">單號 <span class="req">*</span></p>
-          <div class="field" style="max-width:240px;">
+          <div class="field half-width">
             <input type="text" id="recordNumber" placeholder="請手動輸入單號">
           </div>
         </div>
 
         <div class="section">
           <p class="section-heading">發文日期</p>
-          <div class="field" style="max-width:240px;">
+          <div class="field half-width">
             <input type="date" id="issueDate">
           </div>
         </div>
@@ -413,12 +422,12 @@
         <div class="section">
           <p class="section-heading">發文 / 受文資訊</p>
           <div class="grid">
-            <div class="field"><label>發文單位</label><input type="text" id="fromDept" placeholder="例：品管工廠"></div>
-            <div class="field"><label>人員</label><input type="text" id="fromPeople"></div>
+            <div class="field half-width"><label>發文單位</label><input type="text" id="fromDept" placeholder="例：品管工廠"></div>
+            <div class="field half-width"><label>人員</label><input type="text" id="fromPeople"></div>
           </div>
           <div class="grid" style="margin-top:16px;">
-            <div class="field"><label>受文單位</label><input type="text" id="toDept" placeholder="例：管理部"></div>
-            <div class="field"><label>人員</label><input type="text" id="toPeople"></div>
+            <div class="field half-width"><label>受文單位</label><input type="text" id="toDept" placeholder="例：管理部"></div>
+            <div class="field half-width"><label>人員</label><input type="text" id="toPeople"></div>
           </div>
         </div>
 
@@ -478,9 +487,11 @@
 
       <!-- 第2頁: 矯正措施 -->
       <div class="tab-panel" id="panel-blue">
+        <h3 class="panel-title">矯正措施</h3>
+        
         <div class="section">
           <p class="section-heading">選擇單號 <span class="req">*</span></p>
-          <div class="field" style="max-width:300px;">
+          <div class="field half-width">
             <select id="selectRecordNum" onchange="onSelectRecordChange()">
               <option value="">-- 請先選擇現有單號 --</option>
             </select>
@@ -508,7 +519,7 @@
             <p class="section-heading">矯正採取改善措施</p>
             <div class="field" style="margin-bottom:16px;"><label>矯正對策</label><textarea id="correctiveAction" placeholder="請填寫矯正對策…"></textarea></div>
             <div class="field" style="margin-bottom:16px;"><label>原因分析</label><textarea id="rootCause" placeholder="請填寫原因分析…"></textarea></div>
-            <div class="field" style="max-width:240px;"><label>預計完成日期</label><input type="date" id="dueDate"></div>
+            <div class="field half-width"><label>預計完成日期</label><input type="date" id="dueDate"></div>
           </div>
 
           <div class="actions">
@@ -520,6 +531,7 @@
 
       <!-- 第3頁: 成果確認 -->
       <div class="tab-panel" id="panel-green">
+        <h3 class="panel-title">成果確認</h3>
         <div class="placeholder">
           這一頁對應表單的<strong>「缺失改善成果確認」</strong>區塊<br>
           （改善結果確認 / 最後完成日期 / 確認人員 / 單位主管）<br><br>
@@ -529,6 +541,8 @@
 
       <!-- 第4頁: 歷史單據 -->
       <div class="tab-panel" id="panel-history">
+        <h3 class="panel-title">歷史單據</h3>
+        
         <div class="section">
           <p class="section-heading">搜尋與過濾歷史單據</p>
           <div class="field" style="max-width:100%;">
@@ -557,9 +571,6 @@ function showTab(name) {
     p.classList.remove('active');
   });
   document.getElementById('panel-' + name).classList.add('active');
-
-  // 切換整頁的淡色佈景主題
-  document.body.className = 'tab-' + name;
 
   if (name === 'blue') {
     loadExistingRecordsFromCloud();
