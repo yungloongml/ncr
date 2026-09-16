@@ -312,17 +312,17 @@
     
     textarea{ resize:vertical; min-height:160px; }
 
-    /* 單位與人員欄位排版與間距靠近 */
+    /* 恢復原先欄位寬度與較開的間距配置，並把單位與人員欄位拉長 */
     .half-width { max-width: 50%; }
     @media (max-width:640px){ .half-width { max-width: 100%; } }
 
     .unit-row {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 20px;
     }
-    .unit-row .field:first-child { flex: 2; }
-    .unit-row .field:last-child { flex: 1; min-width: 130px; }
+    .unit-row .field:first-child { flex: 2.2; min-width: 220px; }
+    .unit-row .field:last-child { flex: 1.2; min-width: 160px; }
 
     .chip-group{ display:flex; flex-wrap:wrap; gap:8px; }
     .chip{ position:relative; display:inline-flex; }
@@ -441,15 +441,11 @@
         <div class="section">
           <p class="section-heading">發文 / 受文資訊</p>
           <div class="grid">
-            <div class="half-width">
-              <div class="unit-row">
+            <div style="grid-column: span 2; max-width: 75%;">
+              <div class="unit-row" style="margin-bottom: 16px;">
                 <div class="field"><label>發文單位</label><input type="text" id="fromDept" placeholder="例：品管工廠"></div>
                 <div class="field"><label>人員</label><input type="text" id="fromPeople"></div>
               </div>
-            </div>
-          </div>
-          <div class="grid" style="margin-top:16px;">
-            <div class="half-width">
               <div class="unit-row">
                 <div class="field"><label>受文單位</label><input type="text" id="toDept" placeholder="例：管理部"></div>
                 <div class="field"><label>人員</label><input type="text" id="toPeople"></div>
