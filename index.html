@@ -429,32 +429,74 @@
     .detail-dropdown-row td{ background:#F1F5F9 !important; padding:16px 20px !important; }
     .detail-card{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:20px; }
 
-    /* 進度條樣式 */
-    .progress-cell { width: 180px; }
+    /* 8 格方塊進度條樣式 */
+    .progress-cell { width: 170px; }
     .progress-info {
       display: flex;
       justify-content: space-between;
       font-size: 11.5px;
       color: var(--muted);
-      margin-bottom: 4px;
+      margin-bottom: 5px;
       font-weight: 500;
     }
-    .progress-bar-bg {
+    .grid-boxes {
+      display: flex;
+      gap: 3px;
       width: 100%;
-      height: 8px;
+    }
+    .progress-box {
+      flex: 1;
+      height: 10px;
       background: var(--line);
-      border-radius: 4px;
-      overflow: hidden;
+      border-radius: 2px;
+      transition: background 0.2s ease;
     }
-    .progress-bar-fill {
-      height: 100%;
+    .progress-box.filled {
       background: var(--accent);
-      border-radius: 4px;
-      transition: width 0.3s ease;
     }
-    .progress-bar-fill.complete {
+    .progress-box.complete {
       background: var(--green);
     }
+
+    /* 進度說明範例區塊樣式 */
+    .progress-legend-card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .legend-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .legend-items {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px 20px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12.5px;
+      color: var(--ink);
+    }
+    .legend-mini-boxes {
+      display: flex;
+      gap: 2px;
+      width: 70px;
+    }
+    .legend-mini-box {
+      flex: 1;
+      height: 7px;
+      background: var(--line);
+      border-radius: 1px;
+    }
+    .legend-mini-box.filled { background: var(--accent); }
+    .legend-mini-box.complete { background: var(--green); }
 
     .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:32px; padding-top:16px; border-top:1px solid var(--line); }
     .msg{ font-size:12.5px; color:var(--danger); margin-right:auto; }
@@ -753,6 +795,52 @@
           </div>
         </div>
 
+        <!-- 搜尋跟列表中間的進度說明範例區塊 -->
+        <div class="progress-legend-card">
+          <div class="legend-title">進度狀態說明範例</div>
+          <div class="legend-items">
+            <div class="legend-item">
+              <div class="legend-mini-boxes">
+                <div class="legend-mini-box filled"></div>
+                <div class="legend-mini-box"></div>
+                <div class="legend-mini-box"></div>
+                <div class="legend-mini-box"></div>
+                <div class="legend-mini-box"></div>
+                <div class="legend-mini-box"></div>
+                <div class="legend-mini-box"></div>
+                <div class="legend-mini-box"></div>
+              </div>
+              <span>剛新增（初期階段）</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-mini-boxes">
+                <div class="legend-mini-box filled"></div>
+                <div class="legend-mini-box filled"></div>
+                <div class="legend-mini-box filled"></div>
+                <div class="legend-mini-box filled"></div>
+                <div class="legend-mini-box"></div>
+                <div class="legend-mini-box"></div>
+                <div class="legend-mini-box"></div>
+                <div class="legend-mini-box"></div>
+              </div>
+              <span>進行到中段（矯正措施）</span>
+            </div>
+            <div class="legend-item">
+              <div class="legend-mini-boxes">
+                <div class="legend-mini-box complete"></div>
+                <div class="legend-mini-box complete"></div>
+                <div class="legend-mini-box complete"></div>
+                <div class="legend-mini-box complete"></div>
+                <div class="legend-mini-box complete"></div>
+                <div class="legend-mini-box complete"></div>
+                <div class="legend-mini-box complete"></div>
+                <div class="legend-mini-box complete"></div>
+              </div>
+              <span>8 格全滿（已全部完成）</span>
+            </div>
+          </div>
+        </div>
+
         <div class="section">
           <p class="section-heading">已儲存單據列表（點擊單號可展開/收合詳細內容）</p>
           <div id="historyListContainer">
@@ -915,22 +1003,21 @@ function onSelectGreenRecordChange() {
   container.style.display = 'block';
 }
 
-// 根據 8 個步驟判定目前進度（回傳百分比與步驟名稱）
+// 根據 8 個步驟判定目前進度（回傳已完成的格子數與目前階段名稱）
 function calculateProgress(d) {
-  // 步驟定義
   var steps = [
-    { name: "1. 新增單號", done: !!d.number },
-    { name: "2. 人員/主管簽核(一)", done: !!(d.number && d.issueDate && d.fromPeople) },
-    { name: "3. 傳給受文人員確認", done: !!(d.toDept && d.toPeople) },
-    { name: "4. 矯正措施填寫", done: !!(d.correctiveAction && d.rootCause) },
-    { name: "5. 人員/主管簽核(二)", done: !!(d.correctiveAction && d.dueDate) },
-    { name: "6. 成果填寫", done: !!d.greenResult },
-    { name: "7. 人員/主管簽核(三)", done: !!(d.greenFinishDate && d.greenConfirmPeople) },
-    { name: "8. 完成", done: !!(d.greenResult && d.greenFinishDate && d.greenConfirmPeople && d.greenManager) }
+    { name: "新增單號", done: !!d.number },
+    { name: "人員/主管簽核(一)", done: !!(d.number && d.issueDate && d.fromPeople) },
+    { name: "傳給受文人員確認", done: !!(d.toDept && d.toPeople) },
+    { name: "矯正措施填寫", done: !!(d.correctiveAction && d.rootCause) },
+    { name: "人員/主管簽核(二)", done: !!(d.correctiveAction && d.dueDate) },
+    { name: "成果填寫", done: !!d.greenResult },
+    { name: "人員/主管簽核(三)", done: !!(d.greenFinishDate && d.greenConfirmPeople) },
+    { name: "完成", done: !!(d.greenResult && d.greenFinishDate && d.greenConfirmPeople && d.greenManager) }
   ];
 
   var completedCount = 0;
-  var currentStepName = "1. 新增單號";
+  var currentStepName = "新增單號";
 
   for (var i = 0; i < steps.length; i++) {
     if (steps[i].done) {
@@ -943,11 +1030,13 @@ function calculateProgress(d) {
     }
   }
 
-  // 確保至少有一步
   if (completedCount === 0) completedCount = 1;
 
-  var percent = Math.round((completedCount / steps.length) * 100);
-  return { percent: percent, stepName: currentStepName, isComplete: (completedCount === steps.length) };
+  return { 
+    count: completedCount, 
+    stepName: currentStepName, 
+    isComplete: (completedCount === steps.length) 
+  };
 }
 
 function renderHistoryTable(records) {
@@ -971,7 +1060,17 @@ function renderHistoryTable(records) {
   records.forEach(function(d){
     var safeNum = esc(d.number);
     var prog = calculateProgress(d);
-    var fillClass = prog.isComplete ? 'progress-bar-fill complete' : 'progress-bar-fill';
+
+    // 建立 8 個格子 HTML
+    var boxesHtml = '<div class="grid-boxes">';
+    for (var i = 1; i <= 8; i++) {
+      var boxClass = 'progress-box';
+      if (i <= prog.count) {
+        boxClass += prog.isComplete ? ' complete' : ' filled';
+      }
+      boxesHtml += '<div class="' + boxClass + '"></div>';
+    }
+    boxesHtml += '</div>';
 
     html += '<tr>' +
       '<td><span class="record-link" onclick="toggleDetail(\'' + safeNum + '\')">' + safeNum + '</span></td>' +
@@ -982,11 +1081,9 @@ function renderHistoryTable(records) {
       '<td class="progress-cell">' +
         '<div class="progress-info">' +
           '<span>' + esc(prog.stepName) + '</span>' +
-          '<span>' + prog.percent + '%</span>' +
+          '<span>' + prog.count + '/8</span>' +
         '</div>' +
-        '<div class="progress-bar-bg">' +
-          '<div class="' + fillClass + '" style="width: ' + prog.percent + '%;"></div>' +
-        '</div>' +
+        boxesHtml +
       '</td>' +
       '<td style="text-align:center; white-space:nowrap;">' +
       '<button class="btn-sm" onclick="printHistoryRecord(\'' + safeNum + '\')">列印</button> ' +
