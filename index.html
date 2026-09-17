@@ -146,6 +146,40 @@
         console.error(err);
       }
     };
+
+    window.saveGreenToCloud = async function() {
+      var select = document.getElementById('selectGreenRecordNum');
+      var num = select.value;
+      if (!num) {
+        document.getElementById('msgGreen').textContent = '請先選擇單號。';
+        return;
+      }
+
+      var payload = {
+        greenResult: document.getElementById('greenResult').value,
+        greenFinishDate: document.getElementById('greenFinishDate').value,
+        greenConfirmPeople: document.getElementById('greenConfirmPeople').value,
+        greenManager: document.getElementById('greenManager').value
+      };
+
+      var btn = document.getElementById('saveGreenBtn');
+      btn.disabled = true;
+      btn.textContent = '儲存中…';
+      document.getElementById('msgGreen').textContent = '';
+
+      try {
+        var docRef = doc(db, "ncr_data", num);
+        await updateDoc(docRef, payload);
+        btn.disabled = false;
+        btn.textContent = '儲存成果內容';
+        alert('成果內容儲存成功！');
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '儲存成果內容';
+        document.getElementById('msgGreen').textContent = '儲存失敗：' + err.message;
+        console.error(err);
+      }
+    };
   </script>
 
   <style>
@@ -174,10 +208,9 @@
       font-size:14px;
       line-height:1.6;
       -webkit-font-smoothing:antialiased;
-      padding-top: 72px; /* 預留頂部固定橫列的高度空間 */
+      padding-top: 72px;
     }
 
-    /* 最上方的固定橫列標題 */
     .top-fixed-bar {
       position: fixed;
       top: 0;
@@ -217,7 +250,7 @@
     }
     @media (max-width:640px){
       .top-fixed-bar { padding: 0 16px; }
-      .top-fixed-bar h2 { display: none; } /* 手機版空間有限時隱藏副標題或自適應 */
+      .top-fixed-bar h2 { display: none; }
     }
 
     .app-layout{
@@ -229,7 +262,6 @@
       .app-layout{ flex-direction:column; }
     }
 
-    /* 左側直式選單 */
     .sidebar{
       width:240px;
       flex:none;
@@ -270,7 +302,6 @@
     .tab-btn:hover{ background:rgba(0,0,0,0.03); color:var(--ink); }
     .tab-btn.active{ background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
 
-    /* 主內容區 */
     .main-content{ 
       flex:1; 
       min-width:0; 
@@ -290,7 +321,6 @@
     .tab-panel{ display:none; }
     .tab-panel.active{ display:block; }
 
-    /* 分頁標題樣式（含線條圖示） */
     .panel-title{
       display:flex;
       align-items:center;
@@ -419,6 +449,68 @@
       padding:56px 24px; text-align:center; color:var(--muted); font-size:13.5px; line-height:1.8;
     }
     .placeholder strong{ color:var(--ink); font-weight:600; }
+
+    /* 彈出式編輯選單 Modal 樣式 */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-box {
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+      text-align: center;
+    }
+    .modal-box h4 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      color: var(--ink);
+    }
+    .modal-box p {
+      margin: 0 0 20px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .modal-options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .modal-btn {
+      appearance: none;
+      background: var(--bg);
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--ink);
+      cursor: pointer;
+      transition: all .15s ease;
+    }
+    .modal-btn:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent-ink);
+    }
+    .modal-close-btn {
+      margin-top: 16px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .modal-close-btn:hover { color: var(--ink); }
   </style>
 </head>
 <body>
@@ -439,7 +531,7 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="yellow" onclick="showTab('yellow')">新增單號</button>
       <button class="tab-btn" data-tab="blue" onclick="showTab('blue')">矯正措施</button>
-      <button class="tab-btn" data-tab="green" onclick="showTab('green')">成果確認</button>
+      <button class="tab-btn" data-tab="green" onclick="showTab('green')">成果內容</button>
       <button class="tab-btn" data-tab="history" onclick="showTab('history')">歷史單據</button>
     </div>
   </div>
@@ -586,16 +678,37 @@
         </div>
       </div>
 
-      <!-- 第3頁: 成果確認 -->
+      <!-- 第3頁: 成果內容 -->
       <div class="tab-panel" id="panel-green">
         <h3 class="panel-title">
           <svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-          成果確認
+          成果內容
         </h3>
-        <div class="placeholder">
-          這一頁對應表單的<strong>「缺失改善成果確認」</strong>區塊<br>
-          （改善結果確認 / 最後完成日期 / 確認人員 / 單位主管）<br><br>
-          此區塊不在系統中填寫，列印出來的表單此處將維持空白，供後續人工簽核填寫。
+        
+        <div class="section">
+          <p class="section-heading">選擇單號 <span class="req">*</span></p>
+          <div class="field half-width">
+            <select id="selectGreenRecordNum" onchange="onSelectGreenRecordChange()">
+              <option value="">-- 請先選擇現有單號 --</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="greenContainer" style="display:none;">
+          <div class="section">
+            <p class="section-heading">缺失改善成果填寫與確認</p>
+            <div class="field" style="margin-bottom:16px;"><label>改善結果確認說明</label><textarea id="greenResult" placeholder="請填寫改善結果確認內容…"></textarea></div>
+            <div class="grid" style="margin-bottom:16px;">
+              <div class="field"><label>最後完成日期</label><input type="date" id="greenFinishDate"></div>
+              <div class="field"><label>確認人員</label><input type="text" id="greenConfirmPeople" placeholder="請輸入確認人員"></div>
+            </div>
+            <div class="field half-width"><label>單位主管</label><input type="text" id="greenManager" placeholder="請輸入單位主管"></div>
+          </div>
+
+          <div class="actions">
+            <span class="msg" id="msgGreen"></span>
+            <button class="primary" id="saveGreenBtn" onclick="saveGreenToCloud()">儲存成果內容</button>
+          </div>
         </div>
       </div>
 
@@ -609,7 +722,7 @@
         <div class="section">
           <p class="section-heading">搜尋與過濾歷史單據</p>
           <div class="field" style="max-width:100%;">
-            <input type="text" id="historySearchInput" placeholder="輸入單號、發文單位或關鍵字進行即時搜尋…" oninput="filterHistoryRecords()">
+            <input type="text" id="historySearchInput" placeholder="輸入單號、發文人員或關鍵字進行即時搜尋…" oninput="filterHistoryRecords()">
           </div>
         </div>
 
@@ -625,7 +738,23 @@
   </div>
 </div>
 
+<!-- 編輯選單 Modal -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal-box">
+    <h4>選擇編輯項目</h4>
+    <p id="editModalSub">請選擇您想要編輯單號 <span id="editModalNum" style="font-weight:700; color:var(--accent);"></span> 的哪個區塊：</p>
+    <div class="modal-options">
+      <button class="modal-btn" onclick="goToEditSection('yellow')">1. 新增單號（基本內容）</button>
+      <button class="modal-btn" onclick="goToEditSection('blue')">2. 矯正措施</button>
+      <button class="modal-btn" onclick="goToEditSection('green')">3. 成果內容</button>
+    </div>
+    <button class="modal-close-btn" onclick="closeEditModal()">取消</button>
+  </div>
+</div>
+
 <script>
+var currentEditingNum = '';
+
 function showTab(name) {
   document.querySelectorAll('.tab-btn').forEach(function(b){
     b.classList.toggle('active', b.dataset.tab === name);
@@ -637,6 +766,8 @@ function showTab(name) {
 
   if (name === 'blue') {
     loadExistingRecordsFromCloud();
+  } else if (name === 'green') {
+    loadGreenRecordsFromCloud();
   } else if (name === 'history') {
     loadHistoryRecords();
   }
@@ -659,6 +790,14 @@ function getRadioValue(name) {
   return el ? el.value : '';
 }
 
+function setRadioValue(name, val) {
+  var radios = document.querySelectorAll('input[name=' + name + ']');
+  radios.forEach(function(r){
+    r.checked = (r.value === val);
+    r._wasChecked = r.checked;
+  });
+}
+
 function collectFormData() {
   return {
     number: document.getElementById('recordNumber').value.trim(),
@@ -674,7 +813,11 @@ function collectFormData() {
     description: document.getElementById('description').value,
     correctiveAction: '',
     rootCause: '',
-    dueDate: ''
+    dueDate: '',
+    greenResult: '',
+    greenFinishDate: '',
+    greenConfirmPeople: '',
+    greenManager: ''
   };
 }
 
@@ -705,6 +848,46 @@ function onSelectRecordChange() {
   container.style.display = 'block';
 }
 
+async function loadGreenRecordsFromCloud() {
+  var select = document.getElementById('selectGreenRecordNum');
+  select.innerHTML = '<option value="">-- 載入中... --</option>';
+  try {
+    var querySnapshot = await getDocs(collection(db, "ncr_data"));
+    select.innerHTML = '<option value="">-- 請先選擇現有單號 --</option>';
+    window._greenCloudRecords = {};
+    querySnapshot.forEach((docSnap) => {
+      var rec = docSnap.data();
+      window._greenCloudRecords[rec.number] = rec;
+      var opt = document.createElement('option');
+      opt.value = rec.number;
+      opt.textContent = '單號：' + rec.number + (rec.fromDept ? ' (' + rec.fromDept + ')' : '');
+      select.appendChild(opt);
+    });
+  } catch (err) {
+    console.error('載入單號失敗', err);
+    select.innerHTML = '<option value="">-- 載入失敗，請重新整理 --</option>';
+  }
+}
+
+function onSelectGreenRecordChange() {
+  var select = document.getElementById('selectGreenRecordNum');
+  var container = document.getElementById('greenContainer');
+  var num = select.value;
+
+  if (!num || !window._greenCloudRecords || !window._greenCloudRecords[num]) {
+    container.style.display = 'none';
+    return;
+  }
+
+  var d = window._greenCloudRecords[num];
+  document.getElementById('greenResult').value = d.greenResult || '';
+  document.getElementById('greenFinishDate').value = d.greenFinishDate || '';
+  document.getElementById('greenConfirmPeople').value = d.greenConfirmPeople || '';
+  document.getElementById('greenManager').value = d.greenManager || '';
+
+  container.style.display = 'block';
+}
+
 function renderHistoryTable(records) {
   var container = document.getElementById('historyListContainer');
   if (!records || records.length === 0) {
@@ -716,8 +899,8 @@ function renderHistoryTable(records) {
     '<thead><tr>' +
     '<th>單號</th>' +
     '<th>發文日期</th>' +
-    '<th>發文單位</th>' +
-    '<th>受文單位</th>' +
+    '<th>發文人員</th>' +
+    '<th>受文人員</th>' +
     '<th>品質類別</th>' +
     '<th>等級</th>' +
     '<th style="text-align:center;">操作</th>' +
@@ -728,13 +911,13 @@ function renderHistoryTable(records) {
     html += '<tr>' +
       '<td><span class="record-link" onclick="toggleDetail(\'' + safeNum + '\')">' + safeNum + '</span></td>' +
       '<td>' + esc(d.issueDate || '-') + '</td>' +
-      '<td>' + esc(d.fromDept || '-') + '</td>' +
-      '<td>' + esc(d.toDept || '-') + '</td>' +
+      '<td>' + esc(d.fromPeople || '-') + '</td>' +
+      '<td>' + esc(d.toPeople || '-') + '</td>' +
       '<td>' + esc(d.qualityCategory || '-') + '</td>' +
       '<td>' + esc(d.severity || '-') + '</td>' +
       '<td style="text-align:center; white-space:nowrap;">' +
       '<button class="btn-sm" onclick="printHistoryRecord(\'' + safeNum + '\')">列印</button> ' +
-      '<button class="btn-sm" style="background:var(--blue);" onclick="editHistoryRecord(\'' + safeNum + '\')">編輯</button> ' +
+      '<button class="btn-sm" style="background:var(--blue);" onclick="openEditModal(\'' + safeNum + '\')">編輯</button> ' +
       '<button class="btn-sm btn-danger" onclick="deleteHistoryRecord(\'' + safeNum + '\')">刪除</button>' +
       '</td>' +
       '</tr>' +
@@ -754,6 +937,9 @@ function renderHistoryTable(records) {
       '<div class="readonly-item" style="grid-column: span 2;"><span>矯正對策</span><strong style="white-space:pre-wrap;">' + esc(d.correctiveAction || '尚未填寫') + '</strong></div>' +
       '<div class="readonly-item" style="grid-column: span 2;"><span>原因分析</span><strong style="white-space:pre-wrap;">' + esc(d.rootCause || '尚未填寫') + '</strong></div>' +
       '<div class="readonly-item"><span>預計完成日期</span><strong>' + esc(d.dueDate || '-') + '</strong></div>' +
+      '<div class="readonly-item" style="grid-column: span 2;"><span>改善結果確認說明</span><strong style="white-space:pre-wrap;">' + esc(d.greenResult || '尚未填寫') + '</strong></div>' +
+      '<div class="readonly-item"><span>最後完成日期</span><strong>' + esc(d.greenFinishDate || '-') + '</strong></div>' +
+      '<div class="readonly-item"><span>確認人員 / 主管</span><strong>' + esc(d.greenConfirmPeople || '-') + ' / ' + esc(d.greenManager || '-') + '</strong></div>' +
       '</div></div></td></tr>';
   });
 
@@ -774,8 +960,8 @@ function filterHistoryRecords() {
 
   var filtered = window._historyRecords.filter(function(d) {
     return (d.number && d.number.toLowerCase().includes(keyword)) ||
-           (d.fromDept && d.fromDept.toLowerCase().includes(keyword)) ||
-           (d.toDept && d.toDept.toLowerCase().includes(keyword)) ||
+           (d.fromPeople && d.fromPeople.toLowerCase().includes(keyword)) ||
+           (d.toPeople && d.toPeople.toLowerCase().includes(keyword)) ||
            (d.qualityCategory && d.qualityCategory.toLowerCase().includes(keyword)) ||
            (d.description && d.description.toLowerCase().includes(keyword));
   });
@@ -790,15 +976,52 @@ function printHistoryRecord(num) {
   }
 }
 
-function editHistoryRecord(num) {
-  showTab('blue');
-  var select = document.getElementById('selectRecordNum');
-  if (!window._cloudRecords) {
-    window._cloudRecords = {};
-    window._historyRecords.forEach(function(r){ window._cloudRecords[r.number] = r; });
+function openEditModal(num) {
+  currentEditingNum = num;
+  document.getElementById('editModalNum').textContent = num;
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').style.display = 'none';
+}
+
+function goToEditSection(panelName) {
+  var record = window._historyRecords.find(function(r) { return r.number === currentEditingNum; });
+  closeEditModal();
+  showTab(panelName);
+
+  if (!record) return;
+
+  if (panelName === 'yellow') {
+    document.getElementById('recordNumber').value = record.number || '';
+    document.getElementById('issueDate').value = record.issueDate || '';
+    document.getElementById('fromDept').value = record.fromDept || '';
+    document.getElementById('fromPeople').value = record.fromPeople || '';
+    document.getElementById('toDept').value = record.toDept || '';
+    document.getElementById('toPeople').value = record.toPeople || '';
+    setRadioValue('qualityCategory', record.qualityCategory || '');
+    setRadioValue('qualityAction', record.qualityAction || '');
+    setRadioValue('safetyCategory', record.safetyCategory || '');
+    setRadioValue('severity', record.severity || '');
+    document.getElementById('description').value = record.description || '';
+  } else if (panelName === 'blue') {
+    var select = document.getElementById('selectRecordNum');
+    if (!window._cloudRecords) {
+      window._cloudRecords = {};
+      window._historyRecords.forEach(function(r){ window._cloudRecords[r.number] = r; });
+    }
+    select.value = currentEditingNum;
+    onSelectRecordChange();
+  } else if (panelName === 'green') {
+    var selectGreen = document.getElementById('selectGreenRecordNum');
+    if (!window._greenCloudRecords) {
+      window._greenCloudRecords = {};
+      window._historyRecords.forEach(function(r){ window._greenCloudRecords[r.number] = r; });
+    }
+    selectGreen.value = currentEditingNum;
+    onSelectGreenRecordChange();
   }
-  select.value = num;
-  onSelectRecordChange();
 }
 
 function mark(selected, value) {
@@ -824,7 +1047,7 @@ function buildPrintHTML(d) {
   '.subtitle{text-align:center;font-size:15px;font-weight:500;margin:5px 0 16px;color:#444;}' +
   '.label{font-weight:600;white-space:nowrap;width:112px;background:#F7F7F5;}' +
   '.section-title{text-align:center;font-weight:700;background:#EEF2F1;font-size:13px;}' +
-  '.tall{height:70px;}.tallest{height:100px;}.note{font-size:10px;margin-top:12px;line-height:1.7;}' +
+  '.tall{height:70px;}.tallest{height:100px;}' +
   '</style></head><body>' +
   '<p class="title">永隆工程股份有限公司</p><p class="subtitle">不符合及矯正措施單</p>' +
   '<table>' +
@@ -840,6 +1063,10 @@ function buildPrintHTML(d) {
   '<tr><td class="label">矯正對策</td><td colspan="2" class="tall">' + esc(d.correctiveAction).replace(/\n/g,'<br>') + '</td></tr>' +
   '<tr><td class="label">原因分析</td><td colspan="2" class="tall">' + esc(d.rootCause).replace(/\n/g,'<br>') + '</td></tr>' +
   '<tr><td class="label">預計完成日期</td><td colspan="2">' + esc(d.dueDate) + '</td></tr>' +
+  '<tr><td colspan="3" class="section-title">缺失改善成果確認</td></tr>' +
+  '<tr><td class="label">改善結果確認</td><td colspan="2" class="tall">' + esc(d.greenResult).replace(/\n/g,'<br>') + '</td></tr>' +
+  '<tr><td class="label">最後完成日期</td><td colspan="2">' + esc(d.greenFinishDate) + '</td></tr>' +
+  '<tr><td class="label">確認人員 / 主管</td><td colspan="2">確認人員：' + esc(d.greenConfirmPeople) + '   單位主管：' + esc(d.greenManager) + '</td></tr>' +
   '</table></body></html>';
 }
 
