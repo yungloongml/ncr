@@ -429,6 +429,33 @@
     .detail-dropdown-row td{ background:#F1F5F9 !important; padding:16px 20px !important; }
     .detail-card{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:20px; }
 
+    /* 進度條樣式 */
+    .progress-cell { width: 180px; }
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: var(--line);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+    }
+    .progress-bar-fill.complete {
+      background: var(--green);
+    }
+
     .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:32px; padding-top:16px; border-top:1px solid var(--line); }
     .msg{ font-size:12.5px; color:var(--danger); margin-right:auto; }
     button.primary{
@@ -450,7 +477,7 @@
     }
     .placeholder strong{ color:var(--ink); font-weight:600; }
 
-    /* 彈出式編輯選單 Modal 樣式 */
+    /* 編輯選單 Modal 樣式 */
     .modal-overlay {
       display: none;
       position: fixed;
@@ -888,6 +915,41 @@ function onSelectGreenRecordChange() {
   container.style.display = 'block';
 }
 
+// 根據 8 個步驟判定目前進度（回傳百分比與步驟名稱）
+function calculateProgress(d) {
+  // 步驟定義
+  var steps = [
+    { name: "1. 新增單號", done: !!d.number },
+    { name: "2. 人員/主管簽核(一)", done: !!(d.number && d.issueDate && d.fromPeople) },
+    { name: "3. 傳給受文人員確認", done: !!(d.toDept && d.toPeople) },
+    { name: "4. 矯正措施填寫", done: !!(d.correctiveAction && d.rootCause) },
+    { name: "5. 人員/主管簽核(二)", done: !!(d.correctiveAction && d.dueDate) },
+    { name: "6. 成果填寫", done: !!d.greenResult },
+    { name: "7. 人員/主管簽核(三)", done: !!(d.greenFinishDate && d.greenConfirmPeople) },
+    { name: "8. 完成", done: !!(d.greenResult && d.greenFinishDate && d.greenConfirmPeople && d.greenManager) }
+  ];
+
+  var completedCount = 0;
+  var currentStepName = "1. 新增單號";
+
+  for (var i = 0; i < steps.length; i++) {
+    if (steps[i].done) {
+      completedCount = i + 1;
+      if (i + 1 < steps.length) {
+        currentStepName = steps[i + 1].name;
+      } else {
+        currentStepName = "已完成";
+      }
+    }
+  }
+
+  // 確保至少有一步
+  if (completedCount === 0) completedCount = 1;
+
+  var percent = Math.round((completedCount / steps.length) * 100);
+  return { percent: percent, stepName: currentStepName, isComplete: (completedCount === steps.length) };
+}
+
 function renderHistoryTable(records) {
   var container = document.getElementById('historyListContainer');
   if (!records || records.length === 0) {
@@ -902,19 +964,30 @@ function renderHistoryTable(records) {
     '<th>發文人員</th>' +
     '<th>受文人員</th>' +
     '<th>品質類別</th>' +
-    '<th>等級</th>' +
+    '<th>目前進度</th>' +
     '<th style="text-align:center;">操作</th>' +
     '</tr></thead><tbody>';
 
   records.forEach(function(d){
     var safeNum = esc(d.number);
+    var prog = calculateProgress(d);
+    var fillClass = prog.isComplete ? 'progress-bar-fill complete' : 'progress-bar-fill';
+
     html += '<tr>' +
       '<td><span class="record-link" onclick="toggleDetail(\'' + safeNum + '\')">' + safeNum + '</span></td>' +
       '<td>' + esc(d.issueDate || '-') + '</td>' +
       '<td>' + esc(d.fromPeople || '-') + '</td>' +
       '<td>' + esc(d.toPeople || '-') + '</td>' +
       '<td>' + esc(d.qualityCategory || '-') + '</td>' +
-      '<td>' + esc(d.severity || '-') + '</td>' +
+      '<td class="progress-cell">' +
+        '<div class="progress-info">' +
+          '<span>' + esc(prog.stepName) + '</span>' +
+          '<span>' + prog.percent + '%</span>' +
+        '</div>' +
+        '<div class="progress-bar-bg">' +
+          '<div class="' + fillClass + '" style="width: ' + prog.percent + '%;"></div>' +
+        '</div>' +
+      '</td>' +
       '<td style="text-align:center; white-space:nowrap;">' +
       '<button class="btn-sm" onclick="printHistoryRecord(\'' + safeNum + '\')">列印</button> ' +
       '<button class="btn-sm" style="background:var(--blue);" onclick="openEditModal(\'' + safeNum + '\')">編輯</button> ' +
