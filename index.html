@@ -26,6 +26,32 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
+    // 收集表單資料
+    function collectFormData() {
+      const getVal = (id) => document.getElementById(id).value.trim();
+      const getRadio = (name) => {
+        const el = document.querySelector(`input[name="${name}"]:checked`);
+        return el ? el.value : '';
+      };
+
+      return {
+        number: getVal('recordNumber'),
+        issueDate: getVal('issueDate'),
+        fromDept: getVal('fromDept'),
+        fromPeople: getVal('fromPeople'),
+        toDept: getVal('toDept'),
+        toPeople: getVal('toPeople'),
+        qualityCategory: getRadio('qualityCategory'),
+        qualityAction: getRadio('qualityAction'),
+        safetyCategory: getRadio('safetyCategory'),
+        severity: getRadio('severity'),
+        description: getVal('description'),
+        updatedAt: new Date().toISOString()
+      };
+    }
+    window.collectFormData = collectFormData;
+
+    // 儲存至 Firebase
     window.saveToFirebase = async function() {
       var data = collectFormData();
       if (!data.number) {
@@ -54,6 +80,7 @@
         await setDoc(doc(db, "ncr_data", data.number), data, { merge: true });
         btn.disabled = false;
         btn.textContent = '儲存並列印';
+        alert('單號 ' + data.number + ' 儲存成功！');
         openPrintWindow(data);
       } catch (err) {
         btn.disabled = false;
@@ -63,29 +90,35 @@
       }
     };
 
+    // 載入現有單號至下拉選單 (矯正措施與成果內容頁)
     window.loadExistingRecordsFromCloud = async function() {
       var select = document.getElementById('selectRecordNum');
-      select.innerHTML = '<option value="">-- 載入中... --</option>';
+      var greenSelect = document.getElementById('selectGreenRecordNum');
+      
       try {
         var querySnapshot = await getDocs(collection(db, "ncr_data"));
-        select.innerHTML = '<option value="">-- 請先選擇現有單號 --</option>';
+        var optionsHtml = '<option value="">-- 請先選擇現有單號 --</option>';
         window._cloudRecords = {};
+        
         querySnapshot.forEach((docSnap) => {
           var rec = docSnap.data();
           window._cloudRecords[rec.number] = rec;
-          var opt = document.createElement('option');
-          opt.value = rec.number;
-          opt.textContent = '單號：' + rec.number + (rec.fromDept ? ' (' + rec.fromDept + ')' : '');
-          select.appendChild(opt);
+          optionsHtml += `<option value="${rec.number}">單號：${rec.number} ${rec.fromDept ? '(' + rec.fromDept + ')' : ''}</option>`;
         });
+        
+        if (select) select.innerHTML = optionsHtml;
+        if (greenSelect) greenSelect.innerHTML = optionsHtml;
       } catch (err) {
         console.error('載入單號失敗', err);
-        select.innerHTML = '<option value="">-- 載入失敗，請重新整理 --</option>';
+        if (select) select.innerHTML = '<option value="">-- 載入失敗，請重新整理 --</option>';
+        if (greenSelect) greenSelect.innerHTML = '<option value="">-- 載入失敗，請重新整理 --</option>';
       }
     };
 
+    // 載入歷史單據列表
     window.loadHistoryRecords = async function() {
       var container = document.getElementById('historyListContainer');
+      if (!container) return;
       container.innerHTML = '<div class="placeholder">資料載入中…</div>';
       try {
         var querySnapshot = await getDocs(collection(db, "ncr_data"));
@@ -102,6 +135,105 @@
       }
     };
 
+    // 渲染歷史表格
+    function renderHistoryTable(records) {
+      var container = document.getElementById('historyListContainer');
+      if (!container) return;
+
+      if (!records || records.length === 0) {
+        container.innerHTML = '<div class="placeholder">目前尚無任何歷史單據紀錄。</div>';
+        return;
+      }
+
+      var html = `
+        <div class="table-container">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>單號</th>
+                <th>發文日期</th>
+                <th>發文單位</th>
+                <th>受文單位</th>
+                <th>品質類別</th>
+                <th>等級</th>
+                <th style="text-align:center;">進度狀態</th>
+                <th style="text-align:center;">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      records.forEach(rec => {
+        let filledCount = 1;
+        if (rec.fromDept) filledCount = 2;
+        if (rec.correctiveAction) filledCount = 5;
+        if (rec.greenResult) filledCount = 8;
+
+        let boxesHtml = '';
+        for (let i = 1; i <= 8; i++) {
+          let cls = i <= filledCount ? (filledCount === 8 ? 'progress-box complete' : 'progress-box filled') : 'progress-box';
+          boxesHtml += `<div class="${cls}"></div>`;
+        }
+
+        html += `
+          <tr>
+            <td><span class="record-link" onclick="toggleDetail('${rec.number}')">${rec.number || '-'}</span></td>
+            <td>${rec.issueDate || '-'}</td>
+            <td>${rec.fromDept || '-'}${rec.fromPeople ? ' (' + rec.fromPeople + ')' : ''}</td>
+            <td>${rec.toDept || '-'}${rec.toPeople ? ' (' + rec.toPeople + ')' : ''}</td>
+            <td>${rec.qualityCategory || '-'}</td>
+            <td>${rec.severity || '非重大異常'}</td>
+            <td class="progress-cell">
+              <div class="progress-info">
+                <span>階段 ${filledCount}/8</span>
+                <span>${filledCount === 8 ? '已結案' : '處理中'}</span>
+              </div>
+              <div class="grid-boxes">${boxesHtml}</div>
+            </td>
+            <td style="text-align:center; white-space:nowrap;">
+              <button class="btn-sm btn-blue-muted" onclick="openPrintWindow(${JSON.stringify(rec).replace(/"/g, '&quot;')})">列印</button>
+              <button class="btn-sm btn-danger-muted" onclick="deleteHistoryRecord('${rec.number}')" style="margin-left:6px;">刪除</button>
+            </td>
+          </tr>
+          <tr id="detail-row-${rec.number}" style="display:none;" class="detail-dropdown-row">
+            <td colspan="8">
+              <div class="detail-card">
+                <strong>詳細內容說明：</strong>
+                <p style="margin: 8px 0 0; color: var(--muted); white-space: pre-wrap;">${rec.description || '無詳細說明'}</p>
+                ${rec.correctiveAction ? `<hr style="border:0; border-top:1px solid var(--line); margin:12px 0;"><strong>矯正對策：</strong><p style="margin: 6px 0 0; color: var(--muted);">${rec.correctiveAction}</p>` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `</tbody></table></div>`;
+      container.innerHTML = html;
+    }
+    window.renderHistoryTable = renderHistoryTable;
+
+    // 切換細節展開
+    window.toggleDetail = function(num) {
+      var row = document.getElementById(`detail-row-${num}`);
+      if (row) {
+        row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+      }
+    };
+
+    // 過濾歷史單據
+    window.filterHistoryRecords = function() {
+      var keyword = document.getElementById('historySearchInput').value.toLowerCase();
+      if (!window._historyRecords) return;
+      var filtered = window._historyRecords.filter(rec => {
+        return (rec.number && rec.number.toLowerCase().includes(keyword)) ||
+               (rec.fromPeople && rec.fromPeople.toLowerCase().includes(keyword)) ||
+               (rec.fromDept && rec.fromDept.toLowerCase().includes(keyword)) ||
+               (rec.description && rec.description.toLowerCase().includes(keyword));
+      });
+      renderHistoryTable(filtered);
+    };
+
+    // 刪除紀錄
     window.deleteHistoryRecord = async function(num) {
       if (!confirm('確定要刪除單號 ' + num + ' 嗎？此動作無法復原。')) return;
       try {
@@ -114,6 +246,7 @@
       }
     };
 
+    // 儲存矯正措施
     window.saveCorrectiveToCloud = async function() {
       var select = document.getElementById('selectRecordNum');
       var num = select.value;
@@ -147,6 +280,7 @@
       }
     };
 
+    // 儲存成果內容
     window.saveGreenToCloud = async function() {
       var select = document.getElementById('selectGreenRecordNum');
       var num = select.value;
@@ -180,6 +314,107 @@
         console.error(err);
       }
     };
+
+    // 下拉選單變更時自動帶入唯讀資訊 (矯正措施頁)
+    window.onSelectRecordChange = function() {
+      var select = document.getElementById('selectRecordNum');
+      var num = select.value;
+      var container = document.getElementById('correctiveContainer');
+      if (!num || !window._cloudRecords || !window._cloudRecords[num]) {
+        container.style.display = 'none';
+        return;
+      }
+      container.style.display = 'block';
+      var rec = window._cloudRecords[num];
+      
+      document.getElementById('ro-issueDate').textContent = rec.issueDate || '-';
+      document.getElementById('ro-from').textContent = (rec.fromDept || '-') + ' / ' + (rec.fromPeople || '-');
+      document.getElementById('ro-to').textContent = (rec.toDept || '-') + ' / ' + (rec.toPeople || '-');
+      document.getElementById('ro-qualityCategory').textContent = rec.qualityCategory || '-';
+      document.getElementById('ro-qualityAction').textContent = rec.qualityAction || '-';
+      document.getElementById('ro-safetyCategory').textContent = rec.safetyCategory || '-';
+      document.getElementById('ro-severity').textContent = rec.severity || '-';
+      document.getElementById('ro-description').textContent = rec.description || '-';
+
+      document.getElementById('correctiveAction').value = rec.correctiveAction || '';
+      document.getElementById('rootCause').value = rec.rootCause || '';
+      document.getElementById('dueDate').value = rec.dueDate || '';
+    };
+
+    // 下拉選單變更時自動帶入資料 (成果內容頁)
+    window.onSelectGreenRecordChange = function() {
+      var select = document.getElementById('selectGreenRecordNum');
+      var num = select.value;
+      var container = document.getElementById('greenContainer');
+      if (!num || !window._cloudRecords || !window._cloudRecords[num]) {
+        container.style.display = 'none';
+        return;
+      }
+      container.style.display = 'block';
+      var rec = window._cloudRecords[num];
+
+      document.getElementById('greenResult').value = rec.greenResult || '';
+      document.getElementById('greenFinishDate').value = rec.greenFinishDate || '';
+      document.getElementById('greenConfirmPeople').value = rec.greenConfirmPeople || '';
+      document.getElementById('greenManager').value = rec.greenManager || '';
+    };
+
+    // 頁籤切換控制
+    window.showTab = function(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+      });
+      document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.id === 'panel-' + tabName);
+      });
+
+      if (tabName === 'blue' || tabName === 'green') {
+        window.loadExistingRecordsFromCloud();
+      } else if (tabName === 'history') {
+        window.loadHistoryRecords();
+      }
+    };
+
+    // 開啟列印視窗
+    window.openPrintWindow = function(data) {
+      var printWin = window('', '_blank');
+      printWin.document.write(`
+        <html>
+        <head>
+          <title>列印單據 - ${data.number || ''}</title>
+          <style>
+            body { font-family: 'Noto Sans TC', sans-serif; padding: 30px; color: #1E293B; }
+            h2 { text-align: center; margin-bottom: 5px; }
+            .subtitle { text-align: center; font-size: 13px; color: #64748B; margin-bottom: 25px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13.5px; }
+            th, td { border: 1px solid #CBD5E1; padding: 10px 14px; text-align: left; }
+            th { background: #F8FAFC; width: 25%; }
+          </style>
+        </head>
+        <body>
+          <h2>永隆工程股份有限公司</h2>
+          <div class="subtitle">不符合及矯正措施單 (單號：${data.number || '-'})</div>
+          <table>
+            <tr><th>發文日期</th><td>${data.issueDate || '-'}</td><th>不符合等級</th><td>${data.severity || '-'}</td></tr>
+            <tr><th>發文單位 / 人員</th><td>${data.fromDept || '-'} / ${data.fromPeople || '-'}</td><th>受文單位 / 人員</th><td>${data.toDept || '-'} / ${data.toPeople || '-'}</td></tr>
+            <tr><th>品質不符合類別</th><td>${data.qualityCategory || '-'}</td><th>品質處理方式</th><td>${data.qualityAction || '-'}</td></tr>
+            <tr><th>職安衛類別</th><td colspan="3">${data.safetyCategory || '-'}</td></tr>
+            <tr><th>不符合內容說明</th><td colspan="3" style="white-space:pre-wrap; height:80px;">${data.description || '-'}</td></tr>
+            <tr><th>矯正對策</th><td colspan="3" style="white-space:pre-wrap; height:60px;">${data.correctiveAction || '尚未填寫'}</td></tr>
+            <tr><th>原因分析</th><td colspan="3" style="white-space:pre-wrap; height:60px;">${data.rootCause || '尚未填寫'}</td></tr>
+            <tr><th>改善結果確認</th><td colspan="3" style="white-space:pre-wrap; height:60px;">${data.greenResult || '尚未填寫'}</td></tr>
+          </table>
+          <script>window.print();</script>
+        </body>
+        </html>
+      `);
+      printWin.document.close();
+    };
+
+    // 頁面初次載入時自動預先抓取一次雲端單號，確保切換頁籤時下拉選單有資料
+    window.addEventListener('DOMContentLoaded', () => {
+      window.loadExistingRecordsFromCloud();
+    });
   </script>
 
   <style>
@@ -212,37 +447,14 @@
     }
 
     .top-fixed-bar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 72px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--line);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0 32px;
-      z-index: 1000;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      position: fixed; top: 0; left: 0; width: 100%; height: 72px;
+      background: var(--surface); border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 32px; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
     }
-    .top-fixed-bar .bar-title-group {
-      display: flex;
-      align-items: baseline;
-      gap: 16px;
-    }
-    .top-fixed-bar h1 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--ink);
-    }
-    .top-fixed-bar h2 {
-      margin: 0;
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--muted);
-    }
+    .top-fixed-bar .bar-title-group { display: flex; align-items: baseline; gap: 16px; }
+    .top-fixed-bar h1 { margin: 0; font-size: 18px; font-weight: 700; color: var(--ink); }
+    .top-fixed-bar h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--muted); }
     .form-code{
       font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted);
       background:var(--bg); border:1px solid var(--line); border-radius:6px;
@@ -253,68 +465,29 @@
       .top-fixed-bar h2 { display: none; }
     }
 
-    .app-layout{
-      display:flex;
-      align-items:stretch;
-      min-height: calc(100vh - 72px);
-    }
-    @media (max-width:860px){
-      .app-layout{ flex-direction:column; }
-    }
+    .app-layout{ display:flex; align-items:stretch; min-height: calc(100vh - 72px); }
+    @media (max-width:860px){ .app-layout{ flex-direction:column; } }
 
     .sidebar{
-      width:240px;
-      flex:none;
-      background:var(--surface);
-      border-right:1px solid var(--line);
-      padding:24px 16px;
-      position:sticky;
-      top:72px;
-      height: calc(100vh - 72px);
-      overflow-y:auto;
+      width:240px; flex:none; background:var(--surface); border-right:1px solid var(--line);
+      padding:24px 16px; position:sticky; top:72px; height: calc(100vh - 72px); overflow-y:auto;
     }
-    @media (max-width:860px){
-      .sidebar{ width:100%; position:static; height:auto; border-right:none; border-bottom:1px solid var(--line); }
-    }
+    @media (max-width:860px){ .sidebar{ width:100%; position:static; height:auto; border-right:none; border-bottom:1px solid var(--line); } }
     
-    .tabs{
-      display:flex;
-      flex-direction:column;
-      gap:6px;
-    }
+    .tabs{ display:flex; flex-direction:column; gap:6px; }
     .tab-btn{
-      appearance:none;
-      background:none;
-      border:none;
-      cursor:pointer;
-      display:flex;
-      align-items:center;
-      width:100%;
-      padding:12px 14px;
-      border-radius:8px;
-      font-family:inherit;
-      font-size:14px;
-      font-weight:500;
-      color:var(--muted);
-      text-align:left;
-      transition:background .15s ease, color .15s ease;
+      appearance:none; background:none; border:none; cursor:pointer; display:flex; align-items:center;
+      width:100%; padding:12px 14px; border-radius:8px; font-family:inherit; font-size:14px;
+      font-weight:500; color:var(--muted); text-align:left; transition:background .15s ease, color .15s ease;
     }
     .tab-btn:hover{ background:rgba(0,0,0,0.03); color:var(--ink); }
     .tab-btn.active{ background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
 
-    .main-content{ 
-      flex:1; 
-      min-width:0; 
-      width:100%; 
-      padding:36px 48px 80px; 
-    }
+    .main-content{ flex:1; min-width:0; width:100%; padding:36px 48px 80px; }
 
     .card{
-      background:var(--surface);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:36px 40px;
-      box-shadow:0 4px 20px rgba(0,0,0,0.02);
+      background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+      padding:36px 40px; box-shadow:0 4px 20px rgba(0,0,0,0.02);
     }
     @media (max-width:640px){ .card{ padding:20px 16px; } }
 
@@ -322,47 +495,19 @@
     .tab-panel.active{ display:block; }
 
     .panel-title{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      font-size:20px;
-      font-weight:700;
-      color:var(--accent-ink);
-      margin:0 0 24px;
-      padding-bottom:10px;
-      border-bottom:2px solid var(--accent);
+      display:flex; align-items:center; gap:10px; font-size:20px; font-weight:700;
+      color:var(--accent-ink); margin:0 0 24px; padding-bottom:10px; border-bottom:2px solid var(--accent);
     }
-    .panel-title svg {
-      width: 22px;
-      height: 22px;
-      stroke: var(--accent);
-      fill: none;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
+    .panel-title svg { width: 22px; height: 22px; stroke: var(--accent); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-    .section{
-      background:var(--bg);
-      border:1px solid var(--line);
-      border-radius:var(--radius);
-      padding:20px 24px;
-      margin-bottom:16px;
-    }
-
-    .section-heading{
-      display:flex; align-items:baseline; gap:4px;
-      font-size:13.5px; font-weight:600; color:var(--muted);
-      margin:0 0 10px;
-    }
+    .section{ background:var(--bg); border:1px solid var(--line); border-radius:var(--radius); padding:20px 24px; margin-bottom:16px; }
+    .section-heading{ display:flex; align-items:baseline; gap:4px; font-size:13.5px; font-weight:600; color:var(--muted); margin:0 0 10px; }
     .req{ color:var(--danger); font-weight:700; }
 
     .grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px 20px; }
     @media (max-width:640px){ .grid{ grid-template-columns:1fr; } }
 
-    .field label{
-      display:block; font-size:12.5px; font-weight:500; color:var(--muted); margin-bottom:6px;
-    }
+    .field label{ display:block; font-size:12.5px; font-weight:500; color:var(--muted); margin-bottom:6px; }
     input[type=text], input[type=number], input[type=date], select, textarea{
       width:100%; font-family:inherit; font-size:14px; color:var(--ink);
       padding:10px 14px; border:1px solid var(--line-strong); border-radius:8px;
@@ -371,17 +516,12 @@
     input[type=text]:focus, input[type=number]:focus, input[type=date]:focus, select:focus, textarea:focus{
       outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);
     }
-    
     textarea{ resize:vertical; min-height:160px; }
 
     .half-width { max-width: 50%; }
     @media (max-width:640px){ .half-width { max-width: 100%; } }
 
-    .unit-row {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-    }
+    .unit-row { display: flex; align-items: center; gap: 20px; }
     .unit-row .field:first-child { flex: 2.2; min-width: 220px; }
     .unit-row .field:last-child { flex: 1.2; min-width: 160px; }
 
@@ -392,8 +532,7 @@
       display:inline-flex; align-items:center; padding:8px 16px;
       border:1px solid var(--line-strong); border-radius:20px;
       font-size:13px; color:var(--ink); background:var(--surface);
-      transition:background .15s ease, border-color .15s ease, color .15s ease;
-      pointer-events:none;
+      transition:background .15s ease, border-color .15s ease, color .15s ease; pointer-events:none;
     }
     .chip input:checked + span{ background:var(--accent); border-color:var(--accent); color:#fff; }
 
@@ -404,8 +543,7 @@
     .severity-chip span{
       display:flex; align-items:center; justify-content:center; gap:8px;
       padding:10px; border:1px solid var(--line-strong); border-radius:8px;
-      font-size:13.5px; font-weight:500; color:var(--ink); pointer-events:none;
-      transition:all .15s ease;
+      font-size:13.5px; font-weight:500; color:var(--ink); pointer-events:none; transition:all .15s ease;
     }
     .severity-chip input:checked + span{ border-color:var(--danger); background:#FEF2F2; color:var(--danger); }
     .severity-chip.minor input:checked + span{ border-color:var(--amber); background:#FFFBEB; color:var(--amber); }
@@ -417,16 +555,16 @@
     .history-table td { text-align:left; }
     .history-table tr:hover td{ background:var(--accent-soft); }
 
-    /* 低彩度操作按鈕樣式 */
+    /* 調整按鈕顏色，降低飽和度 */
     .btn-sm{
-      background:#64748B; color:#fff; border:none; padding:6px 12px; border-radius:6px;
+      background:#94A3B8; color:#fff; border:none; padding:6px 12px; border-radius:6px;
       cursor:pointer; font-size:12px; font-family:inherit; transition:background .15s ease;
     }
-    .btn-sm:hover{ background:#475569; }
-    .btn-blue-muted { background:#3B82F6; }
-    .btn-blue-muted:hover { background:#2563EB; }
-    .btn-danger-muted{ background:#EF4444; }
-    .btn-danger-muted:hover{ background:#DC2626; }
+    .btn-sm:hover{ background:#64748B; }
+    .btn-blue-muted { background:#60A5FA; }
+    .btn-blue-muted:hover { background:#3B82F6; }
+    .btn-danger-muted{ background:#F87171; }
+    .btn-danger-muted:hover{ background:#EF4444; }
 
     .record-link{ color:var(--blue); font-weight:600; cursor:pointer; text-decoration:underline; }
     .record-link:hover{ color:#1D4ED8; }
@@ -434,75 +572,20 @@
     .detail-dropdown-row td{ background:#F1F5F9 !important; padding:16px 20px !important; }
     .detail-card{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:20px; }
 
-    /* 8 格方塊進度條樣式 */
     .progress-cell { width: 170px; }
-    .progress-info {
-      display: flex;
-      justify-content: space-between;
-      font-size: 11.5px;
-      color: var(--muted);
-      margin-bottom: 5px;
-      font-weight: 500;
-    }
-    .grid-boxes {
-      display: flex;
-      gap: 3px;
-      width: 100%;
-    }
-    .progress-box {
-      flex: 1;
-      height: 10px;
-      background: var(--line);
-      border-radius: 2px;
-      transition: background 0.2s ease;
-    }
-    .progress-box.filled {
-      background: var(--accent);
-    }
-    .progress-box.complete {
-      background: var(--green);
-    }
+    .progress-info { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-bottom: 5px; font-weight: 500; }
+    .grid-boxes { display: flex; gap: 3px; width: 100%; }
+    .progress-box { flex: 1; height: 10px; background: var(--line); border-radius: 2px; transition: background 0.2s ease; }
+    .progress-box.filled { background: var(--accent); }
+    .progress-box.complete { background: var(--green); }
 
-    /* 進度說明範例區塊樣式 */
-    .progress-legend-card {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 16px 20px;
-      margin-bottom: 20px;
-    }
-    .legend-title {
-      font-size: 12.5px;
-      font-weight: 600;
-      color: var(--muted);
-      margin-bottom: 12px;
-    }
-    .legend-items {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px 20px;
-    }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 12px;
-      color: var(--ink);
-    }
-    .legend-mini-boxes {
-      display: flex;
-      gap: 2px;
-      width: 70px;
-      flex: none;
-    }
-    .legend-mini-box {
-      flex: 1;
-      height: 7px;
-      background: var(--line);
-      border-radius: 1px;
-    }
-    .legend-mini-box.filled { background: var(--accent); }
-    .legend-mini-box.complete { background: var(--green); }
+    /* 簡化後的單一進度條說明區塊 */
+    .progress-legend-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; }
+    .legend-title { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
+    .simple-progress-bar { display: flex; gap: 4px; height: 8px; width: 100%; margin-bottom: 8px; }
+    .simple-progress-bar span { flex: 1; background: var(--line); border-radius: 2px; }
+    .simple-progress-bar span.active { background: var(--accent); }
+    .legend-desc { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 
     .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:32px; padding-top:16px; border-top:1px solid var(--line); }
     .msg{ font-size:12.5px; color:var(--danger); margin-right:auto; }
@@ -519,78 +602,14 @@
     .readonly-item span{ color:var(--muted); display:block; font-size:12px; margin-bottom:2px; }
 
     .placeholder{
-      background:var(--surface);
-      border:1px dashed var(--line-strong); border-radius:12px;
+      background:var(--surface); border:1px dashed var(--line-strong); border-radius:12px;
       padding:56px 24px; text-align:center; color:var(--muted); font-size:13.5px; line-height:1.8;
     }
     .placeholder strong{ color:var(--ink); font-weight:600; }
-
-    /* 編輯選單 Modal 樣式 */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.5);
-      z-index: 2000;
-      align-items: center;
-      justify-content: center;
-    }
-    .modal-box {
-      background: var(--surface);
-      border-radius: var(--radius);
-      padding: 28px 32px;
-      width: 100%;
-      max-width: 380px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-      text-align: center;
-    }
-    .modal-box h4 {
-      margin: 0 0 8px;
-      font-size: 18px;
-      color: var(--ink);
-    }
-    .modal-box p {
-      margin: 0 0 20px;
-      font-size: 13px;
-      color: var(--muted);
-    }
-    .modal-options {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .modal-btn {
-      appearance: none;
-      background: var(--bg);
-      border: 1px solid var(--line-strong);
-      border-radius: 8px;
-      padding: 12px;
-      font-family: inherit;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--ink);
-      cursor: pointer;
-      transition: all .15s ease;
-    }
-    .modal-btn:hover {
-      background: var(--accent-soft);
-      border-color: var(--accent);
-      color: var(--accent-ink);
-    }
-    .modal-close-btn {
-      margin-top: 16px;
-      background: none;
-      border: none;
-      color: var(--muted);
-      cursor: pointer;
-      font-size: 13px;
-    }
-    .modal-close-btn:hover { color: var(--ink); }
   </style>
 </head>
 <body>
 
-<!-- 最上方固定橫列 -->
 <div class="top-fixed-bar">
   <div class="bar-title-group">
     <h1>永隆工程股份有限公司</h1>
@@ -600,7 +619,6 @@
 </div>
 
 <div class="app-layout">
-  
   <!-- 左側選單 -->
   <div class="sidebar">
     <div class="tabs">
@@ -801,122 +819,25 @@
           </div>
         </div>
 
-        <!-- 完整 8 個步驟的進度說明範例區塊 -->
+        <!-- 簡化後的進度條說明 -->
         <div class="progress-legend-card">
-          <div class="legend-title">進度狀態說明範例（8 階段對照）</div>
-          <div class="legend-items">
-            <div class="legend-item">
-              <div class="legend-mini-boxes">
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-              </div>
-              <span>1格：剛新增單號</span>
-            </div>
-            <div class="legend-item">
-              <div class="legend-mini-boxes">
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-              </div>
-              <span>2格：人員/主管簽核(一)</span>
-            </div>
-            <div class="legend-item">
-              <div class="legend-mini-boxes">
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-              </div>
-              <span>3格：傳給受文人員確認</span>
-            </div>
-            <div class="legend-item">
-              <div class="legend-mini-boxes">
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-              </div>
-              <span>4格：矯正措施填寫</span>
-            </div>
-            <div class="legend-item">
-              <div class="legend-mini-boxes">
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-              </div>
-              <span>5格：人員/主管簽核(二)</span>
-            </div>
-            <div class="legend-item">
-              <div class="legend-mini-boxes">
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box"></div>
-                <div class="legend-mini-box"></div>
-              </div>
-              <span>6格：成果填寫</span>
-            </div>
-            <div class="legend-item">
-              <div class="legend-mini-boxes">
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box filled"></div>
-                <div class="legend-mini-box"></div>
-              </div>
-              <span>7格：人員/主管簽核(三)</span>
-            </div>
-            <div class="legend-item">
-              <div class="legend-mini-boxes">
-                <div class="legend-mini-box complete"></div>
-                <div class="legend-mini-box complete"></div>
-                <div class="legend-mini-box complete"></div>
-                <div class="legend-mini-box complete"></div>
-                <div class="legend-mini-box complete"></div>
-                <div class="legend-mini-box complete"></div>
-                <div class="legend-mini-box complete"></div>
-                <div class="legend-mini-box complete"></div>
-              </div>
-              <span>8格：已全部完成</span>
-            </div>
+          <div class="legend-title">進度說明</div>
+          <div class="simple-progress-bar">
+            <span class="active"></span>
+            <span class="active"></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="legend-desc">
+            <span>1. 初始單號</span>
+            <span>2. 基本填寫</span>
+            <span>3. 矯正措施</span>
+            <span>4. 成果結案</span>
           </div>
         </div>
 
-        <div class="section">
-          <p class="section-heading">已儲存單據列表（點擊單號可展開/收合詳細內容）</p>
-          <div id="historyListContainer">
-            <div class="placeholder">資料載入中…</div>
-          </div>
+        <div id="historyListContainer">
+          <div class="placeholder">點擊左側「歷史單據」將自動載入所有歷史紀錄…</div>
         </div>
       </div>
 
@@ -924,397 +845,5 @@
   </div>
 </div>
 
-<!-- 編輯選單 Modal -->
-<div class="modal-overlay" id="editModal">
-  <div class="modal-box">
-    <h4>選擇編輯項目</h4>
-    <p id="editModalSub">請選擇您想要編輯單號 <span id="editModalNum" style="font-weight:700; color:var(--accent);"></span> 的哪個區塊：</p>
-    <div class="modal-options">
-      <button class="modal-btn" onclick="goToEditSection('yellow')">1. 新增單號（基本內容）</button>
-      <button class="modal-btn" onclick="goToEditSection('blue')">2. 矯正措施</button>
-      <button class="modal-btn" onclick="goToEditSection('green')">3. 成果內容</button>
-    </div>
-    <button class="modal-close-btn" onclick="closeEditModal()">取消</button>
-  </div>
-</div>
-
-<script>
-var currentEditingNum = '';
-
-function showTab(name) {
-  document.querySelectorAll('.tab-btn').forEach(function(b){
-    b.classList.toggle('active', b.dataset.tab === name);
-  });
-  document.querySelectorAll('.tab-panel').forEach(function(p){
-    p.classList.remove('active');
-  });
-  document.getElementById('panel-' + name).classList.add('active');
-
-  if (name === 'blue') {
-    loadExistingRecordsFromCloud();
-  } else if (name === 'green') {
-    loadGreenRecordsFromCloud();
-  } else if (name === 'history') {
-    loadHistoryRecords();
-  }
-}
-
-function makeToggleable(groupName) {
-  var radios = document.querySelectorAll('input[name=' + groupName + ']');
-  radios.forEach(function(r){
-    r._wasChecked = r.checked;
-    r.addEventListener('click', function(){
-      if (r._wasChecked) { r.checked = false; r._wasChecked = false; }
-      else { radios.forEach(function(o){ o._wasChecked = (o === r); }); }
-    });
-  });
-}
-['qualityCategory', 'qualityAction', 'safetyCategory'].forEach(makeToggleable);
-
-function getRadioValue(name) {
-  var el = document.querySelector('input[name=' + name + ']:checked');
-  return el ? el.value : '';
-}
-
-function setRadioValue(name, val) {
-  var radios = document.querySelectorAll('input[name=' + name + ']');
-  radios.forEach(function(r){
-    r.checked = (r.value === val);
-    r._wasChecked = r.checked;
-  });
-}
-
-function collectFormData() {
-  return {
-    number: document.getElementById('recordNumber').value.trim(),
-    fromDept: document.getElementById('fromDept').value,
-    fromPeople: document.getElementById('fromPeople').value,
-    toDept: document.getElementById('toDept').value,
-    toPeople: document.getElementById('toPeople').value,
-    issueDate: document.getElementById('issueDate').value,
-    qualityCategory: getRadioValue('qualityCategory'),
-    qualityAction: getRadioValue('qualityAction'),
-    safetyCategory: getRadioValue('safetyCategory'),
-    severity: getRadioValue('severity'),
-    description: document.getElementById('description').value,
-    correctiveAction: '',
-    rootCause: '',
-    dueDate: '',
-    greenResult: '',
-    greenFinishDate: '',
-    greenConfirmPeople: '',
-    greenManager: ''
-  };
-}
-
-function onSelectRecordChange() {
-  var select = document.getElementById('selectRecordNum');
-  var container = document.getElementById('correctiveContainer');
-  var num = select.value;
-
-  if (!num || !window._cloudRecords || !window._cloudRecords[num]) {
-    container.style.display = 'none';
-    return;
-  }
-
-  var d = window._cloudRecords[num];
-  document.getElementById('ro-issueDate').textContent = d.issueDate || '-';
-  document.getElementById('ro-from').textContent = (d.fromDept || '-') + ' / ' + (d.fromPeople || '-');
-  document.getElementById('ro-to').textContent = (d.toDept || '-') + ' / ' + (d.toPeople || '-');
-  document.getElementById('ro-qualityCategory').textContent = d.qualityCategory || '-';
-  document.getElementById('ro-qualityAction').textContent = d.qualityAction || '-';
-  document.getElementById('ro-safetyCategory').textContent = d.safetyCategory || '-';
-  document.getElementById('ro-severity').textContent = d.severity || '-';
-  document.getElementById('ro-description').textContent = d.description || '-';
-
-  document.getElementById('correctiveAction').value = d.correctiveAction || '';
-  document.getElementById('rootCause').value = d.rootCause || '';
-  document.getElementById('dueDate').value = d.dueDate || '';
-
-  container.style.display = 'block';
-}
-
-async function loadGreenRecordsFromCloud() {
-  var select = document.getElementById('selectGreenRecordNum');
-  select.innerHTML = '<option value="">-- 載入中... --</option>';
-  try {
-    var querySnapshot = await getDocs(collection(db, "ncr_data"));
-    select.innerHTML = '<option value="">-- 請先選擇現有單號 --</option>';
-    window._greenCloudRecords = {};
-    querySnapshot.forEach((docSnap) => {
-      var rec = docSnap.data();
-      window._greenCloudRecords[rec.number] = rec;
-      var opt = document.createElement('option');
-      opt.value = rec.number;
-      opt.textContent = '單號：' + rec.number + (rec.fromDept ? ' (' + rec.fromDept + ')' : '');
-      select.appendChild(opt);
-    });
-  } catch (err) {
-    console.error('載入單號失敗', err);
-    select.innerHTML = '<option value="">-- 載入失敗，請重新整理 --</option>';
-  }
-}
-
-function onSelectGreenRecordChange() {
-  var select = document.getElementById('selectGreenRecordNum');
-  var container = document.getElementById('greenContainer');
-  var num = select.value;
-
-  if (!num || !window._greenCloudRecords || !window._greenCloudRecords[num]) {
-    container.style.display = 'none';
-    return;
-  }
-
-  var d = window._greenCloudRecords[num];
-  document.getElementById('greenResult').value = d.greenResult || '';
-  document.getElementById('greenFinishDate').value = d.greenFinishDate || '';
-  document.getElementById('greenConfirmPeople').value = d.greenConfirmPeople || '';
-  document.getElementById('greenManager').value = d.greenManager || '';
-
-  container.style.display = 'block';
-}
-
-// 根據 8 個步驟判定目前進度（回傳已完成的格子數與目前階段名稱）
-function calculateProgress(d) {
-  var steps = [
-    { name: "新增單號", done: !!d.number },
-    { name: "人員/主管簽核(一)", done: !!(d.number && d.issueDate && d.fromPeople) },
-    { name: "傳給受文人員確認", done: !!(d.toDept && d.toPeople) },
-    { name: "矯正措施填寫", done: !!(d.correctiveAction && d.rootCause) },
-    { name: "人員/主管簽核(二)", done: !!(d.correctiveAction && d.dueDate) },
-    { name: "成果填寫", done: !!d.greenResult },
-    { name: "人員/主管簽核(三)", done: !!(d.greenFinishDate && d.greenConfirmPeople) },
-    { name: "完成", done: !!(d.greenResult && d.greenFinishDate && d.greenConfirmPeople && d.greenManager) }
-  ];
-
-  var completedCount = 0;
-  var currentStepName = "新增單號";
-
-  for (var i = 0; i < steps.length; i++) {
-    if (steps[i].done) {
-      completedCount = i + 1;
-      if (i + 1 < steps.length) {
-        currentStepName = steps[i + 1].name;
-      } else {
-        currentStepName = "已完成";
-      }
-    }
-  }
-
-  if (completedCount === 0) completedCount = 1;
-
-  return { 
-    count: completedCount, 
-    stepName: currentStepName, 
-    isComplete: (completedCount === steps.length) 
-  };
-}
-
-function renderHistoryTable(records) {
-  var container = document.getElementById('historyListContainer');
-  if (!records || records.length === 0) {
-    container.innerHTML = '<div class="placeholder">目前沒有任何歷史單據紀錄。</div>';
-    return;
-  }
-
-  var html = '<div class="table-container"><table class="history-table">' +
-    '<thead><tr>' +
-    '<th>單號</th>' +
-    '<th>發文日期</th>' +
-    '<th>發文人員</th>' +
-    '<th>受文人員</th>' +
-    '<th>品質類別</th>' +
-    '<th>目前進度</th>' +
-    '<th style="text-align:center;">操作</th>' +
-    '</tr></thead><tbody>';
-
-  records.forEach(function(d){
-    var safeNum = esc(d.number);
-    var prog = calculateProgress(d);
-
-    // 建立 8 個格子 HTML
-    var boxesHtml = '<div class="grid-boxes">';
-    for (var i = 1; i <= 8; i++) {
-      var boxClass = 'progress-box';
-      if (i <= prog.count) {
-        boxClass += prog.isComplete ? ' complete' : ' filled';
-      }
-      boxesHtml += '<div class="' + boxClass + '"></div>';
-    }
-    boxesHtml += '</div>';
-
-    html += '<tr>' +
-      '<td><span class="record-link" onclick="toggleDetail(\'' + safeNum + '\')">' + safeNum + '</span></td>' +
-      '<td>' + esc(d.issueDate || '-') + '</td>' +
-      '<td>' + esc(d.fromPeople || '-') + '</td>' +
-      '<td>' + esc(d.toPeople || '-') + '</td>' +
-      '<td>' + esc(d.qualityCategory || '-') + '</td>' +
-      '<td class="progress-cell">' +
-        '<div class="progress-info">' +
-          '<span>' + esc(prog.stepName) + '</span>' +
-          '<span>' + prog.count + '/8</span>' +
-        '</div>' +
-        boxesHtml +
-      '</td>' +
-      '<td style="text-align:center; white-space:nowrap;">' +
-      '<button class="btn-sm" onclick="printHistoryRecord(\'' + safeNum + '\')">列印</button> ' +
-      '<button class="btn-sm btn-blue-muted" onclick="openEditModal(\'' + safeNum + '\')">編輯</button> ' +
-      '<button class="btn-sm btn-danger-muted" onclick="deleteHistoryRecord(\'' + safeNum + '\')">刪除</button>' +
-      '</td>' +
-      '</tr>' +
-      '<tr id="detail-row-' + safeNum + '" class="detail-dropdown-row" style="display:none;">' +
-      '<td colspan="7">' +
-      '<div class="detail-card">' +
-      '<strong style="color:var(--accent-ink); display:block; margin-bottom:12px;">單號 #' + safeNum + ' 完整內容檢視</strong>' +
-      '<div class="readonly-grid">' +
-      '<div class="readonly-item"><span>發文日期</span><strong>' + esc(d.issueDate || '-') + '</strong></div>' +
-      '<div class="readonly-item"><span>發文單位 / 人員</span><strong>' + esc(d.fromDept || '-') + ' / ' + esc(d.fromPeople || '-') + '</strong></div>' +
-      '<div class="readonly-item"><span>受文單位 / 人員</span><strong>' + esc(d.toDept || '-') + ' / ' + esc(d.toPeople || '-') + '</strong></div>' +
-      '<div class="readonly-item"><span>品質不符合類別</span><strong>' + esc(d.qualityCategory || '-') + '</strong></div>' +
-      '<div class="readonly-item"><span>品質處理方式</span><strong>' + esc(d.qualityAction || '-') + '</strong></div>' +
-      '<div class="readonly-item"><span>職安衛不符合類別</span><strong>' + esc(d.safetyCategory || '-') + '</strong></div>' +
-      '<div class="readonly-item"><span>不符合等級</span><strong>' + esc(d.severity || '-') + '</strong></div>' +
-      '<div class="readonly-item" style="grid-column: span 2;"><span>不符合內容說明</span><strong style="white-space:pre-wrap;">' + esc(d.description || '-') + '</strong></div>' +
-      '<div class="readonly-item" style="grid-column: span 2;"><span>矯正對策</span><strong style="white-space:pre-wrap;">' + esc(d.correctiveAction || '尚未填寫') + '</strong></div>' +
-      '<div class="readonly-item" style="grid-column: span 2;"><span>原因分析</span><strong style="white-space:pre-wrap;">' + esc(d.rootCause || '尚未填寫') + '</strong></div>' +
-      '<div class="readonly-item"><span>預計完成日期</span><strong>' + esc(d.dueDate || '-') + '</strong></div>' +
-      '<div class="readonly-item" style="grid-column: span 2;"><span>改善結果確認說明</span><strong style="white-space:pre-wrap;">' + esc(d.greenResult || '尚未填寫') + '</strong></div>' +
-      '<div class="readonly-item"><span>最後完成日期</span><strong>' + esc(d.greenFinishDate || '-') + '</strong></div>' +
-      '<div class="readonly-item"><span>確認人員 / 主管</span><strong>' + esc(d.greenConfirmPeople || '-') + ' / ' + esc(d.greenManager || '-') + '</strong></div>' +
-      '</div></div></td></tr>';
-  });
-
-  html += '</tbody></table></div>';
-  container.innerHTML = html;
-}
-
-function toggleDetail(num) {
-  var row = document.getElementById('detail-row-' + num);
-  if (row) {
-    row.style.display = (row.style.display === 'none') ? 'table-row' : 'none';
-  }
-}
-
-function filterHistoryRecords() {
-  var keyword = document.getElementById('historySearchInput').value.trim().toLowerCase();
-  if (!window._historyRecords) return;
-
-  var filtered = window._historyRecords.filter(function(d) {
-    return (d.number && d.number.toLowerCase().includes(keyword)) ||
-           (d.fromPeople && d.fromPeople.toLowerCase().includes(keyword)) ||
-           (d.toPeople && d.toPeople.toLowerCase().includes(keyword)) ||
-           (d.qualityCategory && d.qualityCategory.toLowerCase().includes(keyword)) ||
-           (d.description && d.description.toLowerCase().includes(keyword));
-  });
-
-  renderHistoryTable(filtered);
-}
-
-function printHistoryRecord(num) {
-  var record = window._historyRecords.find(function(r) { return r.number === num; });
-  if (record) {
-    openPrintWindow(record);
-  }
-}
-
-function openEditModal(num) {
-  currentEditingNum = num;
-  document.getElementById('editModalNum').textContent = num;
-  document.getElementById('editModal').style.display = 'flex';
-}
-
-function closeEditModal() {
-  document.getElementById('editModal').style.display = 'none';
-}
-
-function goToEditSection(panelName) {
-  var record = window._historyRecords.find(function(r) { return r.number === currentEditingNum; });
-  closeEditModal();
-  showTab(panelName);
-
-  if (!record) return;
-
-  if (panelName === 'yellow') {
-    document.getElementById('recordNumber').value = record.number || '';
-    document.getElementById('issueDate').value = record.issueDate || '';
-    document.getElementById('fromDept').value = record.fromDept || '';
-    document.getElementById('fromPeople').value = record.fromPeople || '';
-    document.getElementById('toDept').value = record.toDept || '';
-    document.getElementById('toPeople').value = record.toPeople || '';
-    setRadioValue('qualityCategory', record.qualityCategory || '');
-    setRadioValue('qualityAction', record.qualityAction || '');
-    setRadioValue('safetyCategory', record.safetyCategory || '');
-    setRadioValue('severity', record.severity || '');
-    document.getElementById('description').value = record.description || '';
-  } else if (panelName === 'blue') {
-    var select = document.getElementById('selectRecordNum');
-    if (!window._cloudRecords) {
-      window._cloudRecords = {};
-      window._historyRecords.forEach(function(r){ window._cloudRecords[r.number] = r; });
-    }
-    select.value = currentEditingNum;
-    onSelectRecordChange();
-  } else if (panelName === 'green') {
-    var selectGreen = document.getElementById('selectGreenRecordNum');
-    if (!window._greenCloudRecords) {
-      window._greenCloudRecords = {};
-      window._historyRecords.forEach(function(r){ window._greenCloudRecords[r.number] = r; });
-    }
-    selectGreen.value = currentEditingNum;
-    onSelectGreenRecordChange();
-  }
-}
-
-function mark(selected, value) {
-  return selected === value ? '■' : '□';
-}
-
-function openPrintWindow(d) {
-  var html = buildPrintHTML(d);
-  var w = window.open('', '_blank');
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  w.onload = function () { w.focus(); w.print(); };
-}
-
-function buildPrintHTML(d) {
-  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>不符合及矯正措施單 #' + d.number + '</title>' +
-  '<style>' +
-  'body{font-family:"Noto Sans TC",sans-serif;font-size:12px;color:#1A1A1A;margin:24px;}' +
-  'table{width:100%;border-collapse:collapse;}' +
-  'td,th{border:1px solid #333;padding:6px 8px;vertical-align:top;}' +
-  '.title{text-align:center;font-size:19px;font-weight:700;margin:0;}' +
-  '.subtitle{text-align:center;font-size:15px;font-weight:500;margin:5px 0 16px;color:#444;}' +
-  '.label{font-weight:600;white-space:nowrap;width:112px;background:#F7F7F5;}' +
-  '.section-title{text-align:center;font-weight:700;background:#EEF2F1;font-size:13px;}' +
-  '.tall{height:70px;}.tallest{height:100px;}' +
-  '</style></head><body>' +
-  '<p class="title">永隆工程股份有限公司</p><p class="subtitle">不符合及矯正措施單</p>' +
-  '<table>' +
-  '<tr><td class="label">單號</td><td>' + d.number + '</td><td class="label" style="text-align:right;">(Q:品質，E:職安衛)</td></tr>' +
-  '<tr><td class="label">發文單位</td><td>' + esc(d.fromDept) + ' 人員：' + esc(d.fromPeople) + '</td><td class="label">發文日期：' + esc(d.issueDate) + '</td></tr>' +
-  '<tr><td class="label">受文單位</td><td colspan="2">' + esc(d.toDept) + ' 人員：' + esc(d.toPeople) + '</td></tr>' +
-  '<tr><td class="label">品質不符合類別</td><td colspan="2">' + mark(d.qualityCategory,'政策')+'政策 '+mark(d.qualityCategory,'材料')+'材料 '+mark(d.qualityCategory,'儀器/量具')+'儀器/量具 '+mark(d.qualityCategory,'施工品質')+'施工品質 '+mark(d.qualityCategory,'其他')+'其他</td></tr>' +
-  '<tr><td class="label">品質處理方式</td><td colspan="2">' + mark(d.qualityAction,'修改/重工')+'修改/重工 '+mark(d.qualityAction,'報廢')+'報廢 '+mark(d.qualityAction,'拒收/退貨')+'拒收/退貨 '+mark(d.qualityAction,'照現況使用')+'照現況使用 '+mark(d.qualityAction,'其他')+'其他</td></tr>' +
-  '<tr><td class="label">職安衛不符合類別</td><td colspan="2">' + mark(d.safetyCategory,'監督量測')+'監督量測 '+mark(d.safetyCategory,'法規不符合')+'法規不符合 '+mark(d.safetyCategory,'管理審查會議')+'管理審查會議 '+mark(d.safetyCategory,'內部稽核')+'內部稽核 '+mark(d.safetyCategory,'外部稽核')+'外部稽核 '+mark(d.safetyCategory,'環境巡查')+'環境巡查 '+mark(d.safetyCategory,'環安衛事件')+'環安衛事件</td></tr>' +
-  '<tr><td class="label">不符合等級</td><td colspan="2">' + mark(d.severity,'非重大異常')+'非重大異常 '+mark(d.severity,'重大異常')+'重大異常</td></tr>' +
-  '<tr><td class="label">不符合內容說明</td><td colspan="2" class="tallest">' + esc(d.description).replace(/\n/g,'<br>') + '</td></tr>' +
-  '<tr><td colspan="3" class="section-title">矯正採取改善措施</td></tr>' +
-  '<tr><td class="label">矯正對策</td><td colspan="2" class="tall">' + esc(d.correctiveAction).replace(/\n/g,'<br>') + '</td></tr>' +
-  '<tr><td class="label">原因分析</td><td colspan="2" class="tall">' + esc(d.rootCause).replace(/\n/g,'<br>') + '</td></tr>' +
-  '<tr><td class="label">預計完成日期</td><td colspan="2">' + esc(d.dueDate) + '</td></tr>' +
-  '<tr><td colspan="3" class="section-title">缺失改善成果確認</td></tr>' +
-  '<tr><td class="label">改善結果確認</td><td colspan="2" class="tall">' + esc(d.greenResult).replace(/\n/g,'<br>') + '</td></tr>' +
-  '<tr><td class="label">最後完成日期</td><td colspan="2">' + esc(d.greenFinishDate) + '</td></tr>' +
-  '<tr><td class="label">確認人員 / 主管</td><td colspan="2">確認人員：' + esc(d.greenConfirmPeople) + '   單位主管：' + esc(d.greenManager) + '</td></tr>' +
-  '</table></body></html>';
-}
-
-function esc(s) {
-  if (!s) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-</script>
 </body>
 </html>
