@@ -26,13 +26,30 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 收集表單資料
-    function collectFormData() {
+    // 收集表單資料 (支援多檔案轉 Base64 預覽與儲存)
+    async function collectFormData() {
       const getVal = (id) => document.getElementById(id).value.trim();
       const getRadio = (name) => {
         const el = document.querySelector(`input[name="${name}"]:checked`);
         return el ? el.value : '';
       };
+
+      const fileInput = document.getElementById('attachmentFile');
+      let attachments = window._currentAttachments || [];
+
+      if (fileInput.files && fileInput.files.length > 0) {
+        attachments = [];
+        for (let i = 0; i < fileInput.files.length; i++) {
+          let file = fileInput.files[i];
+          let base64 = await fileToBase64(file);
+          attachments.push({
+            name: file.name,
+            type: file.type,
+            data: base64
+          });
+        }
+        window._currentAttachments = attachments;
+      }
 
       return {
         number: getVal('recordNumber'),
@@ -46,14 +63,50 @@
         safetyCategory: getRadio('safetyCategory'),
         severity: getRadio('severity'),
         description: getVal('description'),
+        attachments: attachments,
         updatedAt: new Date().toISOString()
       };
     }
     window.collectFormData = collectFormData;
 
-    // 儲存至 Firebase
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+      });
+    }
+
+    // 暫存草稿
+    window.saveDraftToFirebase = async function() {
+      var data = await collectFormData();
+      if (!data.number) {
+        document.getElementById('msg').textContent = '請至少填寫單號以便進行暫存。';
+        return;
+      }
+      data.status = '暫存草稿';
+      var btn = document.getElementById('draftBtn');
+      btn.disabled = true;
+      btn.textContent = '暫存中…';
+      document.getElementById('msg').textContent = '';
+
+      try {
+        await setDoc(doc(db, "ncr_data", data.number), data, { merge: true });
+        btn.disabled = false;
+        btn.textContent = '暫存草稿';
+        alert('單號 ' + data.number + ' 已成功暫存！');
+      } catch (err) {
+        btn.disabled = false;
+        btn.textContent = '暫存草稿';
+        document.getElementById('msg').textContent = '暫存失敗：' + err.message;
+        console.error(err);
+      }
+    };
+
+    // 儲存並產生連結
     window.saveToFirebase = async function() {
-      var data = collectFormData();
+      var data = await collectFormData();
       if (!data.number) {
         document.getElementById('msg').textContent = '請填寫單號。';
         return;
@@ -71,6 +124,7 @@
         return;
       }
 
+      data.status = '正式建立';
       var btn = document.getElementById('saveBtn');
       btn.disabled = true;
       btn.textContent = '儲存中…';
@@ -79,18 +133,29 @@
       try {
         await setDoc(doc(db, "ncr_data", data.number), data, { merge: true });
         btn.disabled = false;
-        btn.textContent = '儲存並列印';
-        alert('單號 ' + data.number + ' 儲存成功！');
-        openPrintWindow(data);
+        btn.textContent = '儲存並產生連結';
+        
+        var reportUrl = window.location.href.split('?')[0] + '?no=' + encodeURIComponent(data.number);
+        document.getElementById('linkResultContainer').style.display = 'block';
+        document.getElementById('generatedReportLink').value = reportUrl;
+        
+        alert('單號 ' + data.number + ' 儲存成功！已在下方產生線上簽核報告連結。');
       } catch (err) {
         btn.disabled = false;
-        btn.textContent = '儲存並列印';
+        btn.textContent = '儲存並產生連結';
         document.getElementById('msg').textContent = '儲存失敗：' + err.message;
         console.error(err);
       }
     };
 
-    // 載入現有單號至下拉選單 (矯正措施與成果內容頁)
+    window.copyReportLink = function() {
+      var copyText = document.getElementById('generatedReportLink');
+      copyText.select();
+      copyText.setSelectionRange(0, 99999);
+      navigator.clipboard.writeText(copyText.value);
+      alert('已成功複製線上簽核報告連結！');
+    };
+
     window.loadExistingRecordsFromCloud = async function() {
       var select = document.getElementById('selectRecordNum');
       var greenSelect = document.getElementById('selectGreenRecordNum');
@@ -98,16 +163,23 @@
       try {
         var querySnapshot = await getDocs(collection(db, "ncr_data"));
         var optionsHtml = '<option value="">-- 請先選擇現有單號 --</option>';
+        var greenOptionsHtml = '<option value="">-- 請先選擇已完成矯正措施的單號 --</option>';
         window._cloudRecords = {};
         
         querySnapshot.forEach((docSnap) => {
           var rec = docSnap.data();
           window._cloudRecords[rec.number] = rec;
-          optionsHtml += `<option value="${rec.number}">單號：${rec.number} ${rec.fromDept ? '(' + rec.fromDept + ')' : ''}</option>`;
+          
+          var optText = `<option value="${rec.number}">單號：${rec.number} ${rec.fromDept ? '(' + rec.fromDept + ')' : ''}</option>`;
+          optionsHtml += optText;
+          
+          if (rec.correctiveAction && rec.correctiveAction.trim() !== '') {
+            greenOptionsHtml += optText;
+          }
         });
         
         if (select) select.innerHTML = optionsHtml;
-        if (greenSelect) greenSelect.innerHTML = optionsHtml;
+        if (greenSelect) greenSelect.innerHTML = greenOptionsHtml;
       } catch (err) {
         console.error('載入單號失敗', err);
         if (select) select.innerHTML = '<option value="">-- 載入失敗，請重新整理 --</option>';
@@ -115,7 +187,6 @@
       }
     };
 
-    // 載入歷史單據列表
     window.loadHistoryRecords = async function() {
       var container = document.getElementById('historyListContainer');
       if (!container) return;
@@ -156,8 +227,8 @@
                 <th>受文單位</th>
                 <th>品質類別</th>
                 <th>等級</th>
-                <th style="text-align:center;">進度狀態</th>
-                <th style="text-align:center;">操作</th>
+                <th>進度狀態</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -175,6 +246,23 @@
           boxesHtml += `<div class="${cls}"></div>`;
         }
 
+        // 處理附件縮圖顯示
+        let attachmentsHtml = '<span style="color:var(--muted);">無附件</span>';
+        if (rec.attachments && rec.attachments.length > 0) {
+          attachmentsHtml = '<div class="thumb-container">';
+          rec.attachments.forEach(att => {
+            if (att.type && att.type.startsWith('image/')) {
+              attachmentsHtml += `<img src="${att.data}" class="thumb-img" onclick="openImageModal('${att.data}', '${att.name}')" title="點擊放大：${att.name}">`;
+            } else {
+              attachmentsHtml += `<a href="${att.data}" download="${att.name}" class="file-link-chip" target="_blank">📄 ${att.name}</a>`;
+            }
+          });
+          attachmentsHtml += '</div>';
+        } else if (rec.attachmentName) {
+          // 相容舊版單一附件名稱
+          attachmentsHtml = `<span style="color:var(--muted);">${rec.attachmentName}</span>`;
+        }
+
         html += `
           <tr>
             <td><span class="record-link" onclick="toggleDetail('${rec.number}')">${rec.number || '-'}</span></td>
@@ -186,20 +274,32 @@
             <td class="progress-cell">
               <div class="progress-info">
                 <span>階段 ${filledCount}/8</span>
-                <span>${filledCount === 8 ? '已結案' : '處理中'}</span>
+                <span>${filledCount === 8 ? '完成' : '處理中'}</span>
               </div>
               <div class="grid-boxes">${boxesHtml}</div>
             </td>
-            <td style="text-align:center; white-space:nowrap;">
-              <button class="btn-sm btn-blue-muted" onclick="openPrintWindow(${JSON.stringify(rec).replace(/"/g, '&quot;')})">列印</button>
+            <td style="white-space:nowrap;">
+              <button class="btn-sm btn-blue-muted" onclick="openPrintWindow(${JSON.stringify(rec).replace(/"/g, '&quot;')})">預覽</button>
               <button class="btn-sm btn-danger-muted" onclick="deleteHistoryRecord('${rec.number}')" style="margin-left:6px;">刪除</button>
             </td>
           </tr>
           <tr id="detail-row-${rec.number}" style="display:none;" class="detail-dropdown-row">
-            <td colspan="8">
+            <td colspan="8" style="text-align:left;">
               <div class="detail-card">
+                <!-- 需求 3：將「品質處理方式」移至詳細內容上方 -->
+                <div style="display: flex; gap: 24px; font-size: 13px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line);">
+                  <div><strong style="color:var(--ink);">品質處理方式：</strong> <span style="color:var(--muted);">${rec.qualityAction || '未填寫'}</span></div>
+                  <div><strong style="color:var(--ink);">職安衛不符合類別：</strong> <span style="color:var(--muted);">${rec.safetyCategory || '無'}</span></div>
+                </div>
+
                 <strong>詳細內容說明：</strong>
-                <p style="margin: 8px 0 0; color: var(--muted); white-space: pre-wrap;">${rec.description || '無詳細說明'}</p>
+                <p style="margin: 8px 0 12px; color: var(--muted); white-space: pre-wrap;">${rec.description || '無詳細說明'}</p>
+
+                <div style="border-top: 1px solid var(--line); padding-top: 12px;">
+                  <strong style="display:block; margin-bottom:6px;">上傳附件：</strong>
+                  ${attachmentsHtml}
+                </div>
+
                 ${rec.correctiveAction ? `<hr style="border:0; border-top:1px solid var(--line); margin:12px 0;"><strong>矯正對策：</strong><p style="margin: 6px 0 0; color: var(--muted);">${rec.correctiveAction}</p>` : ''}
               </div>
             </td>
@@ -212,7 +312,32 @@
     }
     window.renderHistoryTable = renderHistoryTable;
 
-    // 切換細節展開
+    // 圖片放大 Modal 控制
+    window.openImageModal = function(src, title) {
+      let modal = document.getElementById('imageModal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'imageModal';
+        modal.innerHTML = `
+          <div class="modal-backdrop" onclick="closeImageModal()">
+            <div class="modal-content" onclick="event.stopPropagation()">
+              <div class="modal-header"><span id="modalTitle"></span><button onclick="closeImageModal()" class="modal-close">&times;</button></div>
+              <img id="modalImg" src="">
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+      document.getElementById('modalTitle').textContent = title || '附件預覽';
+      document.getElementById('modalImg').src = src;
+      modal.style.display = 'block';
+    };
+
+    window.closeImageModal = function() {
+      let modal = document.getElementById('imageModal');
+      if (modal) modal.style.display = 'none';
+    };
+
     window.toggleDetail = function(num) {
       var row = document.getElementById(`detail-row-${num}`);
       if (row) {
@@ -220,7 +345,6 @@
       }
     };
 
-    // 過濾歷史單據
     window.filterHistoryRecords = function() {
       var keyword = document.getElementById('historySearchInput').value.toLowerCase();
       if (!window._historyRecords) return;
@@ -233,7 +357,6 @@
       renderHistoryTable(filtered);
     };
 
-    // 刪除紀錄
     window.deleteHistoryRecord = async function(num) {
       if (!confirm('確定要刪除單號 ' + num + ' 嗎？此動作無法復原。')) return;
       try {
@@ -246,7 +369,6 @@
       }
     };
 
-    // 儲存矯正措施
     window.saveCorrectiveToCloud = async function() {
       var select = document.getElementById('selectRecordNum');
       var num = select.value;
@@ -280,7 +402,6 @@
       }
     };
 
-    // 儲存成果內容
     window.saveGreenToCloud = async function() {
       var select = document.getElementById('selectGreenRecordNum');
       var num = select.value;
@@ -315,7 +436,6 @@
       }
     };
 
-    // 下拉選單變更時自動帶入唯讀資訊 (矯正措施頁)
     window.onSelectRecordChange = function() {
       var select = document.getElementById('selectRecordNum');
       var num = select.value;
@@ -332,7 +452,7 @@
       document.getElementById('ro-to').textContent = (rec.toDept || '-') + ' / ' + (rec.toPeople || '-');
       document.getElementById('ro-qualityCategory').textContent = rec.qualityCategory || '-';
       document.getElementById('ro-qualityAction').textContent = rec.qualityAction || '-';
-      document.getElementById('ro-safetyCategory').textContent = rec.safetyCategory || '-';
+      document.getElementById('ro-safetyCategory').textContent = rec.safetyCategory || '無';
       document.getElementById('ro-severity').textContent = rec.severity || '-';
       document.getElementById('ro-description').textContent = rec.description || '-';
 
@@ -341,7 +461,6 @@
       document.getElementById('dueDate').value = rec.dueDate || '';
     };
 
-    // 下拉選單變更時自動帶入資料 (成果內容頁)
     window.onSelectGreenRecordChange = function() {
       var select = document.getElementById('selectGreenRecordNum');
       var num = select.value;
@@ -359,7 +478,6 @@
       document.getElementById('greenManager').value = rec.greenManager || '';
     };
 
-    // 頁籤切換控制
     window.showTab = function(tabName) {
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
@@ -375,13 +493,12 @@
       }
     };
 
-    // 開啟列印視窗
     window.openPrintWindow = function(data) {
-      var printWin = window('', '_blank');
+      var printWin = window.open('', '_blank');
       printWin.document.write(`
         <html>
         <head>
-          <title>列印單據 - ${data.number || ''}</title>
+          <title>線上報告與簽核 - ${data.number || ''}</title>
           <style>
             body { font-family: 'Noto Sans TC', sans-serif; padding: 30px; color: #1E293B; }
             h2 { text-align: center; margin-bottom: 5px; }
@@ -389,6 +506,7 @@
             table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 13.5px; }
             th, td { border: 1px solid #CBD5E1; padding: 10px 14px; text-align: left; }
             th { background: #F8FAFC; width: 25%; }
+            .sign-box { margin-top: 30px; display: flex; justify-content: space-between; font-size: 14px; }
           </style>
         </head>
         <body>
@@ -398,20 +516,23 @@
             <tr><th>發文日期</th><td>${data.issueDate || '-'}</td><th>不符合等級</th><td>${data.severity || '-'}</td></tr>
             <tr><th>發文單位 / 人員</th><td>${data.fromDept || '-'} / ${data.fromPeople || '-'}</td><th>受文單位 / 人員</th><td>${data.toDept || '-'} / ${data.toPeople || '-'}</td></tr>
             <tr><th>品質不符合類別</th><td>${data.qualityCategory || '-'}</td><th>品質處理方式</th><td>${data.qualityAction || '-'}</td></tr>
-            <tr><th>職安衛類別</th><td colspan="3">${data.safetyCategory || '-'}</td></tr>
-            <tr><th>不符合內容說明</th><td colspan="3" style="white-space:pre-wrap; height:80px;">${data.description || '-'}</td></tr>
+            <tr><th>職安衛類別</th><td colspan="3">${data.safetyCategory || '無'}</td></tr>
+            <tr><th>不符合內容說明</th><td colspan="3" style="white-space:pre-wrap; height:70px;">${data.description || '-'}</td></tr>
             <tr><th>矯正對策</th><td colspan="3" style="white-space:pre-wrap; height:60px;">${data.correctiveAction || '尚未填寫'}</td></tr>
             <tr><th>原因分析</th><td colspan="3" style="white-space:pre-wrap; height:60px;">${data.rootCause || '尚未填寫'}</td></tr>
             <tr><th>改善結果確認</th><td colspan="3" style="white-space:pre-wrap; height:60px;">${data.greenResult || '尚未填寫'}</td></tr>
           </table>
-          <script>window.print();</script>
+          <div class="sign-box">
+            <div>提報人簽章：_______________</div>
+            <div>單位主管簽章：_______________</div>
+          </div>
+          <div style="text-align:center; margin-top:30px;"><button onclick="window.print();" style="padding:10px 20px; cursor:pointer;">列印完整報告</button></div>
         </body>
         </html>
       `);
       printWin.document.close();
     };
 
-    // 頁面初次載入時自動預先抓取一次雲端單號，確保切換頁籤時下拉選單有資料
     window.addEventListener('DOMContentLoaded', () => {
       window.loadExistingRecordsFromCloud();
     });
@@ -419,33 +540,17 @@
 
   <style>
     :root{
-      --bg:#F8FAFC;
-      --surface:#FFFFFF;
-      --ink:#1E293B;
-      --muted:#64748B;
-      --line:#E2E8F0;
-      --line-strong:#CBD5E1;
-      --accent:#0F766E;
-      --accent-ink:#134E4A;
-      --accent-soft:#F0FDFA;
-      --amber:#D97706;
-      --blue:#2563EB;
-      --green:#16A34A;
-      --danger:#DC2626;
-      --radius:12px;
+      --bg:#F8FAFC; --surface:#FFFFFF; --ink:#1E293B; --muted:#64748B; --line:#E2E8F0;
+      --line-strong:#CBD5E1; --accent:#0F766E; --accent-ink:#134E4A; --accent-soft:#F0FDFA;
+      --amber:#D97706; --blue:#2563EB; --green:#16A34A; --danger:#DC2626; --radius:12px;
     }
     *{ box-sizing:border-box; }
     html,body{ margin:0; padding:0; height:100%; }
     body{
       font-family:'Noto Sans TC','PingFang TC','Microsoft JhengHei',-apple-system,sans-serif;
-      background:var(--bg);
-      color:var(--ink);
-      font-size:14px;
-      line-height:1.6;
-      -webkit-font-smoothing:antialiased;
-      padding-top: 72px;
+      background:var(--bg); color:var(--ink); font-size:14px; line-height:1.6;
+      -webkit-font-smoothing:antialiased; padding-top: 72px;
     }
-
     .top-fixed-bar {
       position: fixed; top: 0; left: 0; width: 100%; height: 72px;
       background: var(--surface); border-bottom: 1px solid var(--line);
@@ -457,13 +562,9 @@
     .top-fixed-bar h2 { margin: 0; font-size: 15px; font-weight: 600; color: var(--muted); }
     .form-code{
       font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--muted);
-      background:var(--bg); border:1px solid var(--line); border-radius:6px;
-      padding:6px 12px; white-space:nowrap;
+      background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 12px; white-space:nowrap;
     }
-    @media (max-width:640px){
-      .top-fixed-bar { padding: 0 16px; }
-      .top-fixed-bar h2 { display: none; }
-    }
+    @media (max-width:640px){ .top-fixed-bar { padding: 0 16px; } .top-fixed-bar h2 { display: none; } }
 
     .app-layout{ display:flex; align-items:stretch; min-height: calc(100vh - 72px); }
     @media (max-width:860px){ .app-layout{ flex-direction:column; } }
@@ -484,7 +585,6 @@
     .tab-btn.active{ background:var(--accent-soft); color:var(--accent-ink); font-weight:600; }
 
     .main-content{ flex:1; min-width:0; width:100%; padding:36px 48px 80px; }
-
     .card{
       background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
       padding:36px 40px; box-shadow:0 4px 20px rgba(0,0,0,0.02);
@@ -508,7 +608,7 @@
     @media (max-width:640px){ .grid{ grid-template-columns:1fr; } }
 
     .field label{ display:block; font-size:12.5px; font-weight:500; color:var(--muted); margin-bottom:6px; }
-    input[type=text], input[type=number], input[type=date], select, textarea{
+    input[type=text], input[type=number], input[type=date], select, textarea, input[type=file]{
       width:100%; font-family:inherit; font-size:14px; color:var(--ink);
       padding:10px 14px; border:1px solid var(--line-strong); border-radius:8px;
       background:var(--surface); transition:border-color .15s ease, box-shadow .15s ease;
@@ -517,7 +617,6 @@
       outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft);
     }
     textarea{ resize:vertical; min-height:160px; }
-
     .half-width { max-width: 50%; }
     @media (max-width:640px){ .half-width { max-width: 100%; } }
 
@@ -549,28 +648,39 @@
     .severity-chip.minor input:checked + span{ border-color:var(--amber); background:#FFFBEB; color:var(--amber); }
 
     .table-container{ width:100%; overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:10px; }
-    .history-table{ width:100%; border-collapse:collapse; text-align:left; font-size:13.5px; }
-    .history-table th, .history-table td{ padding:14px 16px; border-bottom:1px solid var(--line); }
-    .history-table th{ font-weight:600; color:var(--muted); background:rgba(0,0,0,0.02); text-align:center; }
-    .history-table td { text-align:left; }
+    .history-table{ width:100%; border-collapse:collapse; text-align:center; font-size:13.5px; }
+    .history-table th, .history-table td{ padding:14px 16px; border-bottom:1px solid var(--line); text-align:center; vertical-align:middle; }
+    .history-table th{ font-weight:600; color:var(--muted); background:rgba(0,0,0,0.02); }
     .history-table tr:hover td{ background:var(--accent-soft); }
 
-    /* 調整按鈕顏色，降低飽和度 */
     .btn-sm{
       background:#94A3B8; color:#fff; border:none; padding:6px 12px; border-radius:6px;
       cursor:pointer; font-size:12px; font-family:inherit; transition:background .15s ease;
     }
     .btn-sm:hover{ background:#64748B; }
-    .btn-blue-muted { background:#60A5FA; }
-    .btn-blue-muted:hover { background:#3B82F6; }
-    .btn-danger-muted{ background:#F87171; }
-    .btn-danger-muted:hover{ background:#EF4444; }
+    .btn-blue-muted { background:#60A5FA; } .btn-blue-muted:hover { background:#3B82F6; }
+    .btn-danger-muted{ background:#F87171; } .btn-danger-muted:hover{ background:#EF4444; }
 
     .record-link{ color:var(--blue); font-weight:600; cursor:pointer; text-decoration:underline; }
     .record-link:hover{ color:#1D4ED8; }
 
-    .detail-dropdown-row td{ background:#F1F5F9 !important; padding:16px 20px !important; }
+    .detail-dropdown-row td{ background:#F1F5F9 !important; padding:16px 20px !important; text-align:left !important; }
     .detail-card{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:20px; }
+
+    /* 縮圖與預覽樣式 */
+    .thumb-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .thumb-img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line-strong); cursor: pointer; transition: transform 0.2s; }
+    .thumb-img:hover { transform: scale(1.05); border-color: var(--accent); }
+    .file-link-chip { display: inline-block; padding: 6px 12px; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 6px; font-size: 12px; color: var(--blue); text-decoration: none; margin-right: 6px; margin-bottom: 6px; }
+    .file-link-chip:hover { background: #E2E8F0; }
+
+    /* 圖片放大 Modal 樣式 */
+    #imageModal { display: none; position: fixed; z-index: 2000; inset: 0; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .modal-content { background: #fff; border-radius: 8px; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+    .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--muted); }
+    .modal-content img { max-width: 100%; max-height: 75vh; object-fit: contain; padding: 16px; }
 
     .progress-cell { width: 170px; }
     .progress-info { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-bottom: 5px; font-weight: 500; }
@@ -579,23 +689,33 @@
     .progress-box.filled { background: var(--accent); }
     .progress-box.complete { background: var(--green); }
 
-    /* 簡化後的單一進度條說明區塊 */
     .progress-legend-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 20px; margin-bottom: 20px; }
     .legend-title { font-size: 12.5px; font-weight: 600; color: var(--muted); margin-bottom: 10px; }
-    .simple-progress-bar { display: flex; gap: 4px; height: 8px; width: 100%; margin-bottom: 8px; }
+    .simple-progress-bar { display: flex; gap: 3px; height: 8px; width: 100%; margin-bottom: 8px; }
     .simple-progress-bar span { flex: 1; background: var(--line); border-radius: 2px; }
     .simple-progress-bar span.active { background: var(--accent); }
-    .legend-desc { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+    .legend-desc { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); gap: 2px; }
+    .legend-desc span { text-align: center; flex: 1; }
 
     .actions{ display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:32px; padding-top:16px; border-top:1px solid var(--line); }
     .msg{ font-size:12.5px; color:var(--danger); margin-right:auto; }
     button.primary{
       appearance:none; border:none; cursor:pointer; font-family:inherit;
       background:var(--accent); color:#fff; font-size:14px; font-weight:600;
-      padding:12px 32px; border-radius:8px; transition:background .15s ease;
+      padding:12px 28px; border-radius:8px; transition:background .15s ease;
     }
     button.primary:hover{ background:var(--accent-ink); }
     button.primary:disabled{ background:var(--line-strong); color:var(--muted); cursor:default; }
+    button.secondary-btn{
+      appearance:none; border:1px solid var(--line-strong); cursor:pointer; font-family:inherit;
+      background:var(--surface); color:var(--ink); font-size:14px; font-weight:600;
+      padding:12px 20px; border-radius:8px; transition:all .15s ease;
+    }
+    button.secondary-btn:hover{ background:var(--bg); border-color:var(--muted); }
+
+    .link-box-container { margin-top: 16px; padding: 16px; background: #F0FDFA; border: 1px solid var(--accent); border-radius: 8px; display: none; }
+    .link-box-container p { margin: 0 0 8px; font-weight: 600; color: var(--accent-ink); font-size: 13px; }
+    .link-input-row { display: flex; gap: 10px; }
 
     .readonly-box{ background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:20px; margin-bottom:16px; }
     .readonly-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; font-size:13.5px; }
@@ -622,7 +742,7 @@
   <!-- 左側選單 -->
   <div class="sidebar">
     <div class="tabs">
-      <button class="tab-btn active" data-tab="yellow" onclick="showTab('yellow')">新增單號</button>
+      <button class="tab-btn active" data-tab="yellow" onclick="showTab('yellow')">建立單號</button>
       <button class="tab-btn" data-tab="blue" onclick="showTab('blue')">矯正措施</button>
       <button class="tab-btn" data-tab="green" onclick="showTab('green')">成果內容</button>
       <button class="tab-btn" data-tab="history" onclick="showTab('history')">歷史單據</button>
@@ -633,11 +753,11 @@
   <div class="main-content">
     <div class="card">
 
-      <!-- 第1頁: 新增單號 -->
+      <!-- 第1頁: 建立單號 -->
       <div class="tab-panel active" id="panel-yellow">
         <h3 class="panel-title">
           <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
-          新增單號
+          建立單號
         </h3>
         
         <div class="section">
@@ -718,9 +838,27 @@
           <textarea id="description" placeholder="請描述事件經過…"></textarea>
         </div>
 
+        <!-- 需求 2：上傳多個附件欄位 (加入 multiple) -->
+        <div class="section">
+          <p class="section-heading">上傳附件 (支援多個檔案或照片)</p>
+          <div class="field half-width">
+            <input type="file" id="attachmentFile" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
+            <span style="font-size:11.5px; color:var(--muted); display:block; margin-top:4px;">可按住 Ctrl 或 Shift 選擇多個檔案上傳</span>
+          </div>
+        </div>
+
         <div class="actions">
           <span class="msg" id="msg"></span>
-          <button class="primary" id="saveBtn" onclick="saveToFirebase()">儲存並列印</button>
+          <button class="secondary-btn" id="draftBtn" onclick="saveDraftToFirebase()">暫存草稿</button>
+          <button class="primary" id="saveBtn" onclick="saveToFirebase()">儲存並產生連結</button>
+        </div>
+
+        <div class="link-box-container" id="linkResultContainer">
+          <p>線上完整報告與簽核頁面連結已產生（可提供提報人與主管線上簽核檢視）：</p>
+          <div class="link-input-row">
+            <input type="text" id="generatedReportLink" readonly>
+            <button class="secondary-btn" onclick="copyReportLink()" style="white-space:nowrap;">複製連結</button>
+          </div>
         </div>
       </div>
 
@@ -779,10 +917,10 @@
         </h3>
         
         <div class="section">
-          <p class="section-heading">選擇單號 <span class="req">*</span></p>
+          <p class="section-heading">選擇單號 (須已完成矯正措施) <span class="req">*</span></p>
           <div class="field half-width">
             <select id="selectGreenRecordNum" onchange="onSelectGreenRecordChange()">
-              <option value="">-- 請先選擇現有單號 --</option>
+              <option value="">-- 請先選擇已完成矯正措施的單號 --</option>
             </select>
           </div>
         </div>
@@ -819,20 +957,13 @@
           </div>
         </div>
 
-        <!-- 簡化後的進度條說明 -->
         <div class="progress-legend-card">
-          <div class="legend-title">進度說明</div>
+          <div class="legend-title">8 階段進度說明</div>
           <div class="simple-progress-bar">
-            <span class="active"></span>
-            <span class="active"></span>
-            <span></span>
-            <span></span>
+            <span class="active"></span><span class="active"></span><span class="active"></span><span class="active"></span><span></span><span></span><span></span><span></span>
           </div>
           <div class="legend-desc">
-            <span>1. 初始單號</span>
-            <span>2. 基本填寫</span>
-            <span>3. 矯正措施</span>
-            <span>4. 成果結案</span>
+            <span>1.建立單號</span><span>2.簽核中</span><span>3.受文單位確認中</span><span>4.填寫矯正改善措施</span><span>5.簽核中</span><span>6.成果待確認</span><span>7.簽核中</span><span>8.完成</span>
           </div>
         </div>
 
