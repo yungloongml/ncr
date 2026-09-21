@@ -11,7 +11,7 @@
   <!-- 引入 Firebase SDK (v10 模組化版本) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getFirestore, collection, doc, setDoc, getDocs, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, getDocs, updateDoc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyCVAyuGB1Nqr1QuTBgDN5tC-CHReCb3Xrc",
@@ -41,7 +41,6 @@
         for (let i = 0; i < fileInput.files.length; i++) {
           let file = fileInput.files[i];
           let base64 = await fileToBase64(file);
-          // 避免重複加入同名同大小檔案
           let exists = attachments.some(att => att.name === file.name && att.size === file.size);
           if (!exists) {
             attachments.push({
@@ -53,7 +52,6 @@
           }
         }
         window._currentAttachments = attachments;
-        // 清空 input 讓同一個檔案可以再次觸發 change (如果需要)
         fileInput.value = '';
         renderCurrentAttachmentsPreview();
       }
@@ -85,7 +83,6 @@
       });
     }
 
-    // 輔助函數：計算並格式化檔案大小 (KB / MB)
     function formatFileSize(bytes) {
       if (!bytes && bytes !== 0) return '';
       const sizeInMB = bytes / (1024 * 1024);
@@ -97,7 +94,6 @@
       }
     }
 
-    // 渲染目前建立表單時已選擇的附件清單 (帶刪除個別檔案功能與檔案大小顯示)
     function renderCurrentAttachmentsPreview() {
       let container = document.getElementById('currentAttachmentList');
       if (!container) {
@@ -117,7 +113,7 @@
       let html = '<div style="font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">已選擇的附件清單：</div><div class="thumb-container">';
       attachments.forEach((att, index) => {
         const sizeStr = formatFileSize(att.size);
-        const isOverLimit = att.size > 1024 * 1024; // 超過 1MB
+        const isOverLimit = att.size > 1024 * 1024;
         const sizeStyle = isOverLimit ? 'color:var(--danger); font-weight:bold;' : 'color:var(--muted);';
 
         if (att.type && att.type.startsWith('image/')) {
@@ -149,7 +145,6 @@
       }
     };
 
-    // 暫存草稿
     window.saveDraftToFirebase = async function() {
       var data = await collectFormData();
       if (!data.number) {
@@ -175,7 +170,6 @@
       }
     };
 
-    // 儲存並產生連結
     window.saveToFirebase = async function() {
       var data = await collectFormData();
       if (!data.number) {
@@ -277,7 +271,6 @@
       }
     };
 
-    // 渲染歷史表格
     function renderHistoryTable(records) {
       var container = document.getElementById('historyListContainer');
       if (!container) return;
@@ -317,7 +310,6 @@
           boxesHtml += `<div class="${cls}"></div>`;
         }
 
-        // 處理歷史詳細資料中的附件預覽與大小顯示
         let attachmentsHtml = '<span style="color:var(--muted);">無附件</span>';
         if (rec.attachments && rec.attachments.length > 0) {
           attachmentsHtml = '<div class="thumb-container">';
@@ -343,13 +335,18 @@
             }
           });
           attachmentsHtml += '</div>';
-        } else if (rec.attachmentName) {
-          attachmentsHtml = `<span style="color:var(--muted);">${rec.attachmentName}</span>`;
+        }
+
+        let signBadge = '';
+        if (rec.signStatus === '已核准') {
+          signBadge = '<span style="color:var(--green); font-weight:bold;">[已核准]</span>';
+        } else if (rec.signStatus === '已退回') {
+          signBadge = '<span style="color:var(--danger); font-weight:bold;">[已退回]</span>';
         }
 
         html += `
           <tr>
-            <td><span class="record-link" onclick="toggleDetail('${rec.number}')">${rec.number || '-'}</span></td>
+            <td><span class="record-link" onclick="toggleDetail('${rec.number}')">${rec.number || '-'}</span> ${signBadge}</td>
             <td>${rec.issueDate || '-'}</td>
             <td>${rec.fromDept || '-'}${rec.fromPeople ? ' (' + rec.fromPeople + ')' : ''}</td>
             <td>${rec.toDept || '-'}${rec.toPeople ? ' (' + rec.toPeople + ')' : ''}</td>
@@ -364,7 +361,8 @@
             </td>
             <td style="white-space:nowrap;">
               <button class="btn-sm btn-blue-muted" onclick="openPrintWindow(${JSON.stringify(rec).replace(/"/g, '&quot;')})">預覽</button>
-              <button class="btn-sm btn-danger-muted" onclick="deleteHistoryRecord('${rec.number}')" style="margin-left:6px;">刪除</button>
+              <button class="btn-sm" onclick="window.open('?no=${rec.number}', '_blank')" style="margin-left:4px; background:var(--accent);">簽核頁</button>
+              <button class="btn-sm btn-danger-muted" onclick="deleteHistoryRecord('${rec.number}')" style="margin-left:4px;">刪除</button>
             </td>
           </tr>
           <tr id="detail-row-${rec.number}" style="display:none;" class="detail-dropdown-row">
@@ -373,17 +371,19 @@
                 <div style="display: flex; gap: 24px; font-size: 13px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line);">
                   <div><strong style="color:var(--ink);">品質處理方式：</strong> <span style="color:var(--muted);">${rec.qualityAction || '未填寫'}</span></div>
                   <div><strong style="color:var(--ink);">職安衛不符合類別：</strong> <span style="color:var(--muted);">${rec.safetyCategory || '無'}</span></div>
+                  <div><strong style="color:var(--ink);">簽核狀態：</strong> <span style="color:var(--accent); font-weight:bold;">${rec.signStatus || '尚未簽核'}</span></div>
                 </div>
 
                 <strong>詳細內容說明：</strong>
                 <p style="margin: 8px 0 12px; color: var(--muted); white-space: pre-wrap;">${rec.description || '無詳細說明'}</p>
 
                 <div style="border-top: 1px solid var(--line); padding-top: 12px; margin-bottom: 12px;">
-                  <strong style="display:block; margin-bottom:6px;">上傳附件（點擊圖片可放大預覽）：</strong>
+                  <strong style="display:block; margin-bottom:6px;">上傳附件：</strong>
                   ${attachmentsHtml}
                 </div>
 
                 ${rec.correctiveAction ? `<hr style="border:0; border-top:1px solid var(--line); margin:12px 0;"><strong>矯正對策：</strong><p style="margin: 6px 0 0; color: var(--muted);">${rec.correctiveAction}</p>` : ''}
+                ${rec.signComment ? `<div style="margin-top:12px; background:#F0FDFA; padding:10px; border-radius:6px; border:1px solid var(--accent);"><strong>主管簽核意見 (${rec.signAuditor || '主管'}):</strong> ${rec.signComment}</div>` : ''}
               </div>
             </td>
           </tr>
@@ -395,7 +395,6 @@
     }
     window.renderHistoryTable = renderHistoryTable;
 
-    // 圖片放大 Modal 控制
     window.openImageModal = function(src, title) {
       let modal = document.getElementById('imageModal');
       if (!modal) {
@@ -616,14 +615,115 @@
       printWin.document.close();
     };
 
-    window.addEventListener('DOMContentLoaded', () => {
-      window.loadExistingRecordsFromCloud();
-      // 監聽檔案選擇變更以支援隨時加入新檔案
-      const fileInput = document.getElementById('attachmentFile');
-      if (fileInput) {
-        fileInput.addEventListener('change', async () => {
-          await collectFormData();
+    // 處理主管線上簽核送出
+    window.submitAudit = async function(status) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const num = urlParams.get('no');
+      const auditor = document.getElementById('auditorName').value.trim();
+      const comment = document.getElementById('auditorComment').value.trim();
+
+      if (!auditor) {
+        alert('請輸入簽核主管姓名');
+        return;
+      }
+
+      try {
+        await updateDoc(doc(db, "ncr_data", num), {
+          signStatus: status,
+          signAuditor: auditor,
+          signComment: comment,
+          signTime: new Date().toISOString()
         });
+        alert(`已成功送出簽核狀態：【${status}】！`);
+        location.reload();
+      } catch (err) {
+        alert('簽核送出失敗：' + err.message);
+        console.error(err);
+      }
+    };
+
+    // 檢查網址是否有 ?no=單號，若有則載入專屬的線上簽核檢視畫面
+    window.addEventListener('DOMContentLoaded', async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const recordNo = urlParams.get('no');
+
+      if (recordNo) {
+        // 切換介面為專屬主管檢視與簽核模式
+        document.getElementById('normalAppLayout').style.display = 'none';
+        const auditContainer = document.getElementById('auditViewContainer');
+        auditContainer.style.display = 'block';
+
+        try {
+          const docSnap = await getDoc(doc(db, "ncr_data", recordNo));
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            document.getElementById('auditRecordTitle').textContent = `不符合及矯正措施單 (單號：${data.number || recordNo})`;
+            
+            let attachmentsHtml = '<span style="color:var(--muted);">無附件</span>';
+            if (data.attachments && data.attachments.length > 0) {
+              attachmentsHtml = '<div class="thumb-container">';
+              data.attachments.forEach(att => {
+                const sizeStr = formatFileSize(att.size);
+                if (att.type && att.type.startsWith('image/')) {
+                  attachmentsHtml += `<img src="${att.data}" class="thumb-img" onclick="openImageModal('${att.data}', '${att.name}')" title="${att.name}" style="width:70px; height:70px;">`;
+                } else {
+                  attachmentsHtml += `<a href="${att.data}" download="${att.name}" class="file-link-chip" target="_blank">📄 ${att.name} (${sizeStr})</a>`;
+                }
+              });
+              attachmentsHtml += '</div>';
+            }
+
+            let auditContentHtml = `
+              <table>
+                <tr><th>發文日期</th><td>${data.issueDate || '-'}</td><th>不符合等級</th><td><span style="color:var(--danger); font-weight:bold;">${data.severity || '-'}</span></td></tr>
+                <tr><th>發文單位 / 人員</th><td>${data.fromDept || '-'} / ${data.fromPeople || '-'}</td><th>受文單位 / 人員</th><td>${data.toDept || '-'} / ${data.toPeople || '-'}</td></tr>
+                <tr><th>品質不符合類別</th><td>${data.qualityCategory || '-'}</td><th>品質處理方式</th><td>${data.qualityAction || '-'}</td></tr>
+                <tr><th>職安衛不符合類別</th><td colspan="3">${data.safetyCategory || '無'}</td></tr>
+                <tr><th>不符合內容說明</th><td colspan="3" style="white-space:pre-wrap;">${data.description || '-'}</td></tr>
+                <tr><th>上傳附件</th><td colspan="3">${attachmentsHtml}</td></tr>
+                <tr><th>矯正對策</th><td colspan="3" style="white-space:pre-wrap;">${data.correctiveAction || '尚未填寫'}</td></tr>
+                <tr><th>原因分析</th><td colspan="3" style="white-space:pre-wrap;">${data.rootCause || '尚未填寫'}</td></tr>
+                <tr><th>預計完成日期</th><td colspan="3">${data.dueDate || '尚未填寫'}</td></tr>
+                <tr><th>改善結果確認</th><td colspan="3" style="white-space:pre-wrap;">${data.greenResult || '尚未填寫'}</td></tr>
+                <tr><th>確認人員 / 主管</th><td colspan="3">${data.greenConfirmPeople || '-'} / ${data.greenManager || '-'}</td></tr>
+              </table>
+            `;
+
+            if (data.signStatus) {
+              auditContentHtml += `
+                <div style="background:#F8FAFC; border:1px solid var(--line); border-radius:8px; padding:16px; margin-top:20px;">
+                  <h4 style="margin:0 0 8px; color:var(--accent-ink);">目前簽核紀錄</h4>
+                  <p style="margin:4px 0;"><strong>簽核狀態：</strong> <span style="color:var(--accent); font-weight:bold;">${data.signStatus}</span></p>
+                  <p style="margin:4px 0;"><strong>簽核主管：</strong> ${data.signAuditor || '-'}</p>
+                  <p style="margin:4px 0;"><strong>簽核意見：</strong> ${data.signComment || '無意見'}</p>
+                </div>
+              `;
+            }
+
+            document.getElementById('auditReportContent').innerHTML = auditContentHtml;
+            if (data.signAuditor) {
+              document.getElementById('auditorName').value = data.signAuditor;
+            }
+            if (data.signComment) {
+              document.getElementById('auditorComment').value = data.signComment;
+            }
+
+          } else {
+            document.getElementById('auditReportContent').innerHTML = '<div class="placeholder">找不到此單號的資料。</div>';
+          }
+        } catch (err) {
+          console.error(err);
+          document.getElementById('auditReportContent').innerHTML = '<div class="placeholder">載入失敗，請檢查網路。</div>';
+        }
+
+      } else {
+        window.loadExistingRecordsFromCloud();
+        const fileInput = document.getElementById('attachmentFile');
+        if (fileInput) {
+          fileInput.addEventListener('change', async () => {
+            await collectFormData();
+          });
+        }
       }
     });
   </script>
@@ -757,14 +857,12 @@
     .detail-dropdown-row td{ background:#F1F5F9 !important; padding:16px 20px !important; text-align:left !important; }
     .detail-card{ background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:20px; }
 
-    /* 縮圖與預覽樣式 */
     .thumb-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
     .thumb-img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line-strong); cursor: pointer; transition: transform 0.2s; }
     .thumb-img:hover { transform: scale(1.05); border-color: var(--accent); }
     .file-link-chip { display: inline-block; padding: 6px 12px; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 6px; font-size: 12px; color: var(--blue); text-decoration: none; margin-right: 6px; margin-bottom: 6px; }
     .file-link-chip:hover { background: #E2E8F0; }
 
-    /* 圖片放大 Modal 樣式 */
     #imageModal { display: none; position: fixed; z-index: 2000; inset: 0; }
     .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; padding: 20px; }
     .modal-content { background: #fff; border-radius: 8px; max-width: 90vw; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
@@ -816,6 +914,14 @@
       padding:56px 24px; text-align:center; color:var(--muted); font-size:13.5px; line-height:1.8;
     }
     .placeholder strong{ color:var(--ink); font-weight:600; }
+
+    /* 主管線上簽核頁面專屬樣式 */
+    .audit-container { max-width: 900px; margin: 40px auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 40px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); }
+    .audit-container h2 { text-align: center; margin-top: 0; color: var(--accent-ink); font-size: 22px; }
+    .audit-container table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13.5px; }
+    .audit-container th, .audit-container td { border: 1px solid var(--line-strong); padding: 12px 16px; text-align: left; }
+    .audit-container th { background: var(--bg); width: 25%; color: var(--muted); font-weight: 600; }
+    .audit-box { margin-top: 30px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
   </style>
 </head>
 <body>
@@ -823,12 +929,44 @@
 <div class="top-fixed-bar">
   <div class="bar-title-group">
     <h1>永隆工程股份有限公司</h1>
-    <h2>不符合及矯正措施單</h2>
+    <h2>不符合及矯正措施單 - 線上簽核系統</h2>
   </div>
   <div class="form-code">PA-21 · 202001V03</div>
 </div>
 
-<div class="app-layout">
+<!-- 主管專屬的線上簽核檢視畫面 (當網址帶有 ?no=xxx 時顯示) -->
+<div id="auditViewContainer" style="display:none; padding: 24px;">
+  <div class="audit-container">
+    <h2 id="auditRecordTitle">不符合及矯正措施單</h2>
+    <div style="text-align:center; font-size:13px; color:var(--muted); margin-bottom:20px;">請詳閱下方完整報告內容後，於下方填寫簽核意見並送出審核結果。</div>
+    
+    <div id="auditReportContent">
+      <div class="placeholder">報表載入中…</div>
+    </div>
+
+    <!-- 主管簽核操作區 -->
+    <div class="audit-box">
+      <h3 style="margin-top:0; font-size:16px; color:var(--ink); border-bottom:1px solid var(--line); padding-bottom:8px;">主管線上簽核區</h3>
+      <div class="grid" style="margin-bottom:16px;">
+        <div class="field">
+          <label>簽核主管姓名 <span class="req">*</span></label>
+          <input type="text" id="auditorName" placeholder="請輸入您的姓名">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label>簽核意見 / 審核說明</label>
+        <textarea id="auditorComment" placeholder="請輸入審核意見（同意或退回原因）…" style="min-height:100px;"></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:12px;">
+        <button class="secondary-btn" onclick="submitAudit('已退回')" style="background:#FEF2F2; color:var(--danger); border-color:var(--danger);">退回修改</button>
+        <button class="primary" onclick="submitAudit('已核准')">確認核准 (Approve)</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 一般操作後台介面 (當網址沒有 ?no=xxx 時顯示) -->
+<div class="app-layout" id="normalAppLayout">
   <!-- 左側選單 -->
   <div class="sidebar">
     <div class="tabs">
@@ -928,7 +1066,6 @@
           <textarea id="description" placeholder="請描述事件經過…"></textarea>
         </div>
 
-        <!-- 支援分次累加上傳多個檔案欄位 -->
         <div class="section">
           <p class="section-heading">上傳附件 (支援分次選取與多個檔案/照片)</p>
           <div class="field half-width">
@@ -944,7 +1081,7 @@
         </div>
 
         <div class="link-box-container" id="linkResultContainer">
-          <p>線上完整報告與簽核頁面連結已產生（可提供提報人與主管線上簽核檢視）：</p>
+          <p>線上完整報告與簽核頁面連結已產生（可直接提供主管點擊進行線上審核）：</p>
           <div class="link-input-row">
             <input type="text" id="generatedReportLink" readonly>
             <button class="secondary-btn" onclick="copyReportLink()" style="white-space:nowrap;">複製連結</button>
