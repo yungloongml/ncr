@@ -8,6 +8,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   
+  <!-- 引入 Signature Pad 手寫簽名套件 -->
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+
   <!-- 引入 Firebase SDK (v10 模組化版本) -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -25,6 +28,8 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+
+    let signaturePad = null;
 
     // 收集表單資料 (支援分次累加多檔案轉 Base64 預覽與儲存)
     async function collectFormData() {
@@ -344,6 +349,11 @@
           signBadge = '<span style="color:var(--danger); font-weight:bold;">[已退回]</span>';
         }
 
+        let signaturePreviewHtml = '';
+        if (rec.signSignature) {
+          signaturePreviewHtml = `<div style="margin-top:8px;"><strong>手寫簽名：</strong><br><img src="${rec.signSignature}" style="max-height:50px; border:1px solid var(--line); border-radius:4px; background:#fff; margin-top:4px;"></div>`;
+        }
+
         html += `
           <tr>
             <td><span class="record-link" onclick="toggleDetail('${rec.number}')">${rec.number || '-'}</span> ${signBadge}</td>
@@ -383,7 +393,7 @@
                 </div>
 
                 ${rec.correctiveAction ? `<hr style="border:0; border-top:1px solid var(--line); margin:12px 0;"><strong>矯正對策：</strong><p style="margin: 6px 0 0; color: var(--muted);">${rec.correctiveAction}</p>` : ''}
-                ${rec.signComment ? `<div style="margin-top:12px; background:#F0FDFA; padding:10px; border-radius:6px; border:1px solid var(--accent);"><strong>主管簽核意見 (${rec.signAuditor || '主管'}):</strong> ${rec.signComment}</div>` : ''}
+                ${rec.signComment ? `<div style="margin-top:12px; background:#F0FDFA; padding:10px; border-radius:6px; border:1px solid var(--accent);"><strong>主管簽核意見 (${rec.signAuditor || '主管'}):</strong> ${rec.signComment} ${signaturePreviewHtml}</div>` : ''}
               </div>
             </td>
           </tr>
@@ -615,7 +625,13 @@
       printWin.document.close();
     };
 
-    // 處理主管線上簽核送出
+    window.clearSignature = function() {
+      if (signaturePad) {
+        signaturePad.clear();
+      }
+    };
+
+    // 處理主管線上簽核送出 (包含手寫簽名圖檔)
     window.submitAudit = async function(status) {
       const urlParams = new URLSearchParams(window.location.search);
       const num = urlParams.get('no');
@@ -627,11 +643,19 @@
         return;
       }
 
+      if (signaturePad && signaturePad.isEmpty()) {
+        alert('請主管在下方手寫簽名板上進行簽名');
+        return;
+      }
+
+      const signatureDataUrl = signaturePad ? signaturePad.toDataURL() : '';
+
       try {
         await updateDoc(doc(db, "ncr_data", num), {
           signStatus: status,
           signAuditor: auditor,
           signComment: comment,
+          signSignature: signatureDataUrl,
           signTime: new Date().toISOString()
         });
         alert(`已成功送出簽核狀態：【${status}】！`);
@@ -652,6 +676,20 @@
         document.getElementById('normalAppLayout').style.display = 'none';
         const auditContainer = document.getElementById('auditViewContainer');
         auditContainer.style.display = 'block';
+
+        // 初始化手寫簽名板
+        const canvas = document.getElementById('signaturePad');
+        if (canvas) {
+          // 動態調整 Canvas 實際繪圖解析度以適應高 DPI 螢幕
+          const ratio = Math.max(window.devicePixelRatio || 1, 1);
+          canvas.width = canvas.offsetWidth * ratio;
+          canvas.height = canvas.offsetHeight * ratio;
+          canvas.getContext("2d").scale(ratio, ratio);
+
+          signaturePad = new SignaturePad(canvas, {
+            backgroundColor: 'rgb(255, 255, 255)'
+          });
+        }
 
         try {
           const docSnap = await getDoc(doc(db, "ncr_data", recordNo));
@@ -690,12 +728,14 @@
             `;
 
             if (data.signStatus) {
+              let sigHtml = data.signSignature ? `<div style="margin-top:8px;"><strong>手寫簽名：</strong><br><img src="${data.signSignature}" style="max-height:60px; border:1px solid var(--line); border-radius:4px; background:#fff; margin-top:4px;"></div>` : '';
               auditContentHtml += `
                 <div style="background:#F8FAFC; border:1px solid var(--line); border-radius:8px; padding:16px; margin-top:20px;">
                   <h4 style="margin:0 0 8px; color:var(--accent-ink);">目前簽核紀錄</h4>
                   <p style="margin:4px 0;"><strong>簽核狀態：</strong> <span style="color:var(--accent); font-weight:bold;">${data.signStatus}</span></p>
                   <p style="margin:4px 0;"><strong>簽核主管：</strong> ${data.signAuditor || '-'}</p>
                   <p style="margin:4px 0;"><strong>簽核意見：</strong> ${data.signComment || '無意見'}</p>
+                  ${sigHtml}
                 </div>
               `;
             }
@@ -922,6 +962,24 @@
     .audit-container th, .audit-container td { border: 1px solid var(--line-strong); padding: 12px 16px; text-align: left; }
     .audit-container th { background: var(--bg); width: 25%; color: var(--muted); font-weight: 600; }
     .audit-box { margin-top: 30px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 24px; }
+    
+    /* 手寫簽名板樣式 */
+    .signature-pad-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 480px;
+      height: 200px;
+      border: 2px dashed var(--line-strong);
+      border-radius: 8px;
+      background: #FFFFFF;
+      touch-action: none;
+    }
+    .signature-pad-wrapper canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
@@ -938,7 +996,7 @@
 <div id="auditViewContainer" style="display:none; padding: 24px;">
   <div class="audit-container">
     <h2 id="auditRecordTitle">不符合及矯正措施單</h2>
-    <div style="text-align:center; font-size:13px; color:var(--muted); margin-bottom:20px;">請詳閱下方完整報告內容後，於下方填寫簽核意見並送出審核結果。</div>
+    <div style="text-align:center; font-size:13px; color:var(--muted); margin-bottom:20px;">請詳閱下方完整報告內容後，於下方填寫簽核意見並以滑鼠或手機手寫簽名後送出。</div>
     
     <div id="auditReportContent">
       <div class="placeholder">報表載入中…</div>
@@ -946,7 +1004,7 @@
 
     <!-- 主管簽核操作區 -->
     <div class="audit-box">
-      <h3 style="margin-top:0; font-size:16px; color:var(--ink); border-bottom:1px solid var(--line); padding-bottom:8px;">主管線上簽核區</h3>
+      <h3 style="margin-top:0; font-size:16px; color:var(--ink); border-bottom:1px solid var(--line); padding-bottom:8px;">主管線上簽核與手寫簽名區</h3>
       <div class="grid" style="margin-bottom:16px;">
         <div class="field">
           <label>簽核主管姓名 <span class="req">*</span></label>
@@ -957,6 +1015,18 @@
         <label>簽核意見 / 審核說明</label>
         <textarea id="auditorComment" placeholder="請輸入審核意見（同意或退回原因）…" style="min-height:100px;"></textarea>
       </div>
+      
+      <!-- 手寫簽名板區塊 -->
+      <div class="field" style="margin-bottom:20px;">
+        <label>手寫簽名 (請用滑鼠或手機觸控在下方框內簽名) <span class="req">*</span></label>
+        <div class="signature-pad-wrapper">
+          <canvas id="signaturePad"></canvas>
+        </div>
+        <div style="margin-top:8px;">
+          <button type="button" class="btn-sm btn-danger-muted" onclick="clearSignature()">清除重寫</button>
+        </div>
+      </div>
+
       <div style="display:flex; justify-content:flex-end; gap:12px;">
         <button class="secondary-btn" onclick="submitAudit('已退回')" style="background:#FEF2F2; color:var(--danger); border-color:var(--danger);">退回修改</button>
         <button class="primary" onclick="submitAudit('已核准')">確認核准 (Approve)</button>
