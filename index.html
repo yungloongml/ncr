@@ -26,7 +26,7 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 收集表單資料 (支援多檔案轉 Base64 預覽與儲存)
+    // 收集表單資料 (支援分次累加多檔案轉 Base64 預覽與儲存)
     async function collectFormData() {
       const getVal = (id) => document.getElementById(id).value.trim();
       const getRadio = (name) => {
@@ -38,17 +38,24 @@
       let attachments = window._currentAttachments || [];
 
       if (fileInput.files && fileInput.files.length > 0) {
-        attachments = [];
         for (let i = 0; i < fileInput.files.length; i++) {
           let file = fileInput.files[i];
           let base64 = await fileToBase64(file);
-          attachments.push({
-            name: file.name,
-            type: file.type,
-            data: base64
-          });
+          // 避免重複加入同名同大小檔案
+          let exists = attachments.some(att => att.name === file.name && att.size === file.size);
+          if (!exists) {
+            attachments.push({
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              data: base64
+            });
+          }
         }
         window._currentAttachments = attachments;
+        // 清空 input 讓同一個檔案可以再次觸發 change (如果需要)
+        fileInput.value = '';
+        renderCurrentAttachmentsPreview();
       }
 
       return {
@@ -77,6 +84,70 @@
         reader.onerror = error => reject(error);
       });
     }
+
+    // 輔助函數：計算並格式化檔案大小 (KB / MB)
+    function formatFileSize(bytes) {
+      if (!bytes && bytes !== 0) return '';
+      const sizeInMB = bytes / (1024 * 1024);
+      if (sizeInMB >= 1) {
+        return `${sizeInMB.toFixed(2)} MB`;
+      } else {
+        const sizeInKB = bytes / 1024;
+        return `${sizeInKB.toFixed(0)} KB`;
+      }
+    }
+
+    // 渲染目前建立表單時已選擇的附件清單 (帶刪除個別檔案功能與檔案大小顯示)
+    function renderCurrentAttachmentsPreview() {
+      let container = document.getElementById('currentAttachmentList');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'currentAttachmentList';
+        container.style.marginTop = '8px';
+        const fileInputWrapper = document.getElementById('attachmentFile').parentNode;
+        fileInputWrapper.appendChild(container);
+      }
+      
+      let attachments = window._currentAttachments || [];
+      if (attachments.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      let html = '<div style="font-size:12px; font-weight:600; color:var(--muted); margin-bottom:6px;">已選擇的附件清單：</div><div class="thumb-container">';
+      attachments.forEach((att, index) => {
+        const sizeStr = formatFileSize(att.size);
+        const isOverLimit = att.size > 1024 * 1024; // 超過 1MB
+        const sizeStyle = isOverLimit ? 'color:var(--danger); font-weight:bold;' : 'color:var(--muted);';
+
+        if (att.type && att.type.startsWith('image/')) {
+          html += `
+            <div style="position:relative; display:inline-flex; flex-direction:column; align-items:center; background:var(--bg); border:1px solid var(--line-strong); border-radius:8px; padding:6px; width:90px;">
+              <img src="${att.data}" class="thumb-img" title="${att.name}" style="width:60px; height:60px;">
+              <span style="font-size:10.5px; ${sizeStyle} margin-top:4px; text-align:center; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${sizeStr}">${sizeStr}</span>
+              <button type="button" onclick="removeAttachment(${index})" style="position:absolute; top:-4px; right:-4px; background:var(--danger); color:#fff; border:none; border-radius:50%; width:18px; height:18px; font-size:10px; cursor:pointer; line-height:1;">&times;</button>
+            </div>
+          `;
+        } else {
+          html += `
+            <div style="position:relative; display:inline-flex; align-items:center; background:var(--bg); border:1px solid var(--line-strong); border-radius:6px; padding:6px 10px; margin-right:6px; margin-bottom:6px;">
+              <span style="font-size:12px; margin-right:6px;">📄 ${att.name} <span style="font-size:11px; ${sizeStyle} margin-left:4px;">(${sizeStr})</span></span>
+              <button type="button" onclick="removeAttachment(${index})" style="background:none; border:none; color:var(--danger); cursor:pointer; font-weight:bold; font-size:14px; line-height:1;">&times;</button>
+            </div>
+          `;
+        }
+      });
+      html += '</div>';
+      container.innerHTML = html;
+    }
+    window.renderCurrentAttachmentsPreview = renderCurrentAttachmentsPreview;
+
+    window.removeAttachment = function(index) {
+      if (window._currentAttachments) {
+        window._currentAttachments.splice(index, 1);
+        renderCurrentAttachmentsPreview();
+      }
+    };
 
     // 暫存草稿
     window.saveDraftToFirebase = async function() {
@@ -246,20 +317,33 @@
           boxesHtml += `<div class="${cls}"></div>`;
         }
 
-        // 處理附件縮圖顯示
+        // 處理歷史詳細資料中的附件預覽與大小顯示
         let attachmentsHtml = '<span style="color:var(--muted);">無附件</span>';
         if (rec.attachments && rec.attachments.length > 0) {
           attachmentsHtml = '<div class="thumb-container">';
           rec.attachments.forEach(att => {
+            const sizeStr = formatFileSize(att.size);
+            const isOverLimit = att.size > 1024 * 1024;
+            const sizeStyle = isOverLimit ? 'color:var(--danger); font-weight:bold;' : 'color:var(--muted);';
+
             if (att.type && att.type.startsWith('image/')) {
-              attachmentsHtml += `<img src="${att.data}" class="thumb-img" onclick="openImageModal('${att.data}', '${att.name}')" title="點擊放大：${att.name}">`;
+              attachmentsHtml += `
+                <div style="display:inline-flex; flex-direction:column; align-items:center; background:var(--bg); border:1px solid var(--line-strong); border-radius:6px; padding:4px; width:75px;">
+                  <img src="${att.data}" class="thumb-img" onclick="openImageModal('${att.data}', '${att.name}')" title="點擊放大：${att.name}" style="width:50px; height:50px;">
+                  <span style="font-size:9.5px; ${sizeStyle} margin-top:2px; text-align:center; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${sizeStr}">${sizeStr}</span>
+                </div>
+              `;
             } else {
-              attachmentsHtml += `<a href="${att.data}" download="${att.name}" class="file-link-chip" target="_blank">📄 ${att.name}</a>`;
+              attachmentsHtml += `
+                <div style="display:inline-flex; align-items:center; background:var(--bg); border:1px solid var(--line-strong); border-radius:6px; padding:4px 8px; margin-right:4px; margin-bottom:4px;">
+                  <a href="${att.data}" download="${att.name}" class="file-link-chip" target="_blank" style="margin:0; border:none; padding:0; background:none;">📄 ${att.name}</a>
+                  <span style="font-size:10px; ${sizeStyle} margin-left:4px;">(${sizeStr})</span>
+                </div>
+              `;
             }
           });
           attachmentsHtml += '</div>';
         } else if (rec.attachmentName) {
-          // 相容舊版單一附件名稱
           attachmentsHtml = `<span style="color:var(--muted);">${rec.attachmentName}</span>`;
         }
 
@@ -286,7 +370,6 @@
           <tr id="detail-row-${rec.number}" style="display:none;" class="detail-dropdown-row">
             <td colspan="8" style="text-align:left;">
               <div class="detail-card">
-                <!-- 需求 3：將「品質處理方式」移至詳細內容上方 -->
                 <div style="display: flex; gap: 24px; font-size: 13px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line);">
                   <div><strong style="color:var(--ink);">品質處理方式：</strong> <span style="color:var(--muted);">${rec.qualityAction || '未填寫'}</span></div>
                   <div><strong style="color:var(--ink);">職安衛不符合類別：</strong> <span style="color:var(--muted);">${rec.safetyCategory || '無'}</span></div>
@@ -295,8 +378,8 @@
                 <strong>詳細內容說明：</strong>
                 <p style="margin: 8px 0 12px; color: var(--muted); white-space: pre-wrap;">${rec.description || '無詳細說明'}</p>
 
-                <div style="border-top: 1px solid var(--line); padding-top: 12px;">
-                  <strong style="display:block; margin-bottom:6px;">上傳附件：</strong>
+                <div style="border-top: 1px solid var(--line); padding-top: 12px; margin-bottom: 12px;">
+                  <strong style="display:block; margin-bottom:6px;">上傳附件（點擊圖片可放大預覽）：</strong>
                   ${attachmentsHtml}
                 </div>
 
@@ -535,6 +618,13 @@
 
     window.addEventListener('DOMContentLoaded', () => {
       window.loadExistingRecordsFromCloud();
+      // 監聽檔案選擇變更以支援隨時加入新檔案
+      const fileInput = document.getElementById('attachmentFile');
+      if (fileInput) {
+        fileInput.addEventListener('change', async () => {
+          await collectFormData();
+        });
+      }
     });
   </script>
 
@@ -838,12 +928,12 @@
           <textarea id="description" placeholder="請描述事件經過…"></textarea>
         </div>
 
-        <!-- 需求 2：上傳多個附件欄位 (加入 multiple) -->
+        <!-- 支援分次累加上傳多個檔案欄位 -->
         <div class="section">
-          <p class="section-heading">上傳附件 (支援多個檔案或照片)</p>
+          <p class="section-heading">上傳附件 (支援分次選取與多個檔案/照片)</p>
           <div class="field half-width">
             <input type="file" id="attachmentFile" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx">
-            <span style="font-size:11.5px; color:var(--muted); display:block; margin-top:4px;">可按住 Ctrl 或 Shift 選擇多個檔案上傳</span>
+            <span style="font-size:11.5px; color:var(--muted); display:block; margin-top:4px;">可分多次選擇檔案上傳，系統會自動累積保留</span>
           </div>
         </div>
 
